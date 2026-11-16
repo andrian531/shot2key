@@ -23,6 +23,8 @@ class SettingsUpdate(BaseModel):
     default_image_engine: str | None = None
     rea_video_lang: str | None = None
     rea_video_vlm: bool | None = None
+    auto_analyze: bool | None = None
+    default_style_prompt: str | None = None
 
 
 @router.get("")

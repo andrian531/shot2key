@@ -33,6 +33,13 @@ class ScenePatch(BaseModel):
     description: str | None = None
     camera: str | None = None
     lighting: str | None = None
+    replace_characters: bool | None = None
+    character_mappings: dict[str, Any] | None = None
+
+
+class ApplyCharactersRequest(BaseModel):
+    character_mappings: dict[str, Any]
+    replace_characters: bool = True
 
 
 def _load(project_id: str) -> dict[str, Any]:
@@ -158,6 +165,28 @@ def patch_scene(project_id: str, scene_id: str, body: ScenePatch) -> dict[str, A
         scene = store.find_scene(item, scene_id)
         if scene is not None:
             scene.update(fields)
+
+    return store.mutate(project_id, apply)
+
+
+@router.post("/{project_id}/apply-characters")
+def apply_characters(project_id: str, body: ApplyCharactersRequest) -> dict[str, Any]:
+    _load(project_id)
+
+    def apply(item: dict[str, Any]) -> None:
+        for scene in item.get("scenes") or []:
+            detected = scene.get("detected_characters") or []
+            slots = {c.get("slot") for c in detected if isinstance(c, dict) and c.get("slot")}
+            matched = {
+                slot: mapping
+                for slot, mapping in body.character_mappings.items()
+                if not slots or slot in slots
+            }
+            if matched:
+                existing = dict(scene.get("character_mappings") or {})
+                existing.update(matched)
+                scene["character_mappings"] = existing
+                scene["replace_characters"] = body.replace_characters
 
     return store.mutate(project_id, apply)
 

@@ -1,28 +1,23 @@
 import { useEffect, useState } from 'react'
-import type { Settings } from '../types'
 import { api } from '../api/client'
+import type { Settings } from '../types'
+import { useApp } from '../state/AppContext'
 
-interface Props {
-  open: boolean
-  onClose: () => void
-  onSaved: () => void
-}
-
-export default function SettingsDialog({ open, onClose, onSaved }: Props) {
+/** `/settings` — API keys, default engines, auto-analyze and style prompt. */
+export default function SettingsView() {
+  const { refreshStatus } = useApp()
   const [settings, setSettings] = useState<Settings | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!open) return
-    setError(null)
+    document.title = 'Settings · Shot2Key'
     api
       .getSettings()
       .then(setSettings)
       .catch((err: Error) => setError(err.message))
-  }, [open])
-
-  if (!open) return null
+  }, [])
 
   function update<K extends keyof Settings>(key: K, value: Settings[K]) {
     setSettings((current) => (current ? { ...current, [key]: value } : current))
@@ -32,6 +27,7 @@ export default function SettingsDialog({ open, onClose, onSaved }: Props) {
     if (!settings) return
     setSaving(true)
     setError(null)
+    setNotice(null)
     try {
       const saved = await api.saveSettings({
         gemini_api_key: settings.gemini_api_key,
@@ -43,10 +39,12 @@ export default function SettingsDialog({ open, onClose, onSaved }: Props) {
         default_image_engine: settings.default_image_engine,
         rea_video_lang: settings.rea_video_lang,
         rea_video_vlm: settings.rea_video_vlm,
+        auto_analyze: settings.auto_analyze,
+        default_style_prompt: settings.default_style_prompt,
       })
       setSettings(saved)
-      onSaved()
-      onClose()
+      await refreshStatus()
+      setNotice('Settings tersimpan.')
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -55,22 +53,24 @@ export default function SettingsDialog({ open, onClose, onSaved }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-black/70 p-4" onClick={onClose}>
-      <div
-        className="card w-full max-w-xl p-6"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-strong">Settings</h2>
-          <button className="text-slate-500 hover:text-slate-300" onClick={onClose}>
-            ✕
-          </button>
-        </div>
+    <div className="mx-auto max-w-3xl px-5 py-6">
+      <div className="mb-4">
+        <h1 className="text-lg font-semibold text-strong">Settings</h1>
+        <p className="mt-0.5 text-[12px] text-slate-500">
+          API key, engine default, dan perilaku otomatis. Disimpan lokal di{' '}
+          <code className="text-slate-400">backend/data/settings.json</code>.
+        </p>
+      </div>
 
-        {!settings ? (
-          <p className="text-sm text-slate-500">Memuat...</p>
-        ) : (
-          <div className="space-y-4">
+      {!settings ? (
+        <div className="card p-6 text-sm text-slate-500">
+          {error ? `Gagal memuat settings: ${error}` : 'Memuat...'}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <section className="card space-y-4 p-5">
+            <h2 className="text-sm font-semibold text-strong">API Provider</h2>
+
             <div>
               <label className="label">Gemini API key</label>
               <input
@@ -112,7 +112,10 @@ export default function SettingsDialog({ open, onClose, onSaved }: Props) {
                 />
               </div>
             </div>
+          </section>
 
+          <section className="card space-y-4 p-5">
+            <h2 className="text-sm font-semibold text-strong">Engine Default</h2>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="label">Analyzer default</label>
@@ -168,24 +171,46 @@ export default function SettingsDialog({ open, onClose, onSaved }: Props) {
                 Pakai VLM (butuh API key Gemini di env)
               </label>
             </div>
+          </section>
 
-            {error && (
-              <p className="rounded border border-rose-900/60 bg-rose-950/40 px-2 py-1 text-[11px] text-rose-300">
-                {error}
-              </p>
-            )}
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button className="btn-ghost" onClick={onClose}>
-                Batal
-              </button>
-              <button className="btn-primary" disabled={saving} onClick={save}>
-                {saving ? 'Menyimpan...' : 'Simpan'}
-              </button>
+          <section className="card space-y-3 p-5">
+            <h2 className="text-sm font-semibold text-strong">Otomatisasi &amp; Gaya</h2>
+            <label className="flex items-center gap-2 text-xs text-slate-300">
+              <input
+                type="checkbox"
+                checked={Boolean(settings.auto_analyze)}
+                onChange={(event) => update('auto_analyze', event.target.checked)}
+              />
+              Auto-Analyze &amp; buat prompt otomatis setelah video selesai dipecah
+            </label>
+            <div>
+              <label className="label">Default Style Prompt (otomatis ditambahkan saat generate)</label>
+              <textarea
+                className="input min-h-[80px] resize-y font-mono text-xs"
+                value={settings.default_style_prompt ?? ''}
+                onChange={(event) => update('default_style_prompt', event.target.value)}
+              />
             </div>
+          </section>
+
+          {error && (
+            <p className="rounded border border-rose-900/60 bg-rose-950/40 px-3 py-2 text-xs text-rose-300">
+              {error}
+            </p>
+          )}
+          {notice && (
+            <p className="rounded border border-emerald-900/60 bg-emerald-950/40 px-3 py-2 text-xs text-emerald-300">
+              {notice}
+            </p>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <button className="btn-primary" disabled={saving} onClick={save}>
+              {saving ? 'Menyimpan...' : 'Simpan Settings'}
+            </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

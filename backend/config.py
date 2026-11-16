@@ -68,6 +68,8 @@ DEFAULT_SETTINGS: dict[str, object] = {
     "default_image_engine": "agy",
     "rea_video_lang": "en",
     "rea_video_vlm": False,
+    "auto_analyze": True,
+    "default_style_prompt": "cinematic film still, 35mm lens, natural lighting, detailed textures, 16:9, no text, no watermark",
 }
 
 
@@ -96,6 +98,10 @@ def get_breakdowns_dir() -> Path:
 
 def get_settings_path() -> Path:
     return get_data_dir() / "settings.json"
+
+
+def get_characters_dir() -> Path:
+    return get_data_dir() / "characters"
 
 
 def ensure_dirs() -> None:

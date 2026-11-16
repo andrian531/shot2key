@@ -127,6 +127,9 @@ def _build_scenes(
                 "prompt": "",
                 "camera": "",
                 "lighting": "",
+                "detected_characters": [],
+                "replace_characters": False,
+                "character_mappings": {},
                 "engine": None,
                 "image_path": None,
                 "image_status": "idle",
@@ -204,6 +207,11 @@ async def _run_decompose(project_id: str) -> None:
 
     store.mutate(project_id, apply)
 
+    if bool(values.get("auto_analyze", True)) and scenes:
+        default_engine = str(values.get("default_analyzer") or "agy")
+        if default_engine in config.ANALYZER_ENGINES:
+            start_analyze(project_id, default_engine)
+
 
 def start_decompose(project_id: str) -> None:
     _spawn(f"{project_id}:decompose", _run_decompose(project_id))
@@ -279,6 +287,7 @@ async def _run_analyze(project_id: str, engine: str, scene_ids: Iterable[str] | 
                     prompt=data["prompt"],
                     camera=data["camera"],
                     lighting=data["lighting"],
+                    detected_characters=data.get("characters") or [],
                     engine=eng,
                     analysis_error=None,
                 ),

@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Any
 
 import config
+from core import characters as char_store
+from core import settings as settings_store
 from providers.base import (
     ProviderError,
     SceneAnalysis,
@@ -169,7 +171,15 @@ class CliImageGenerator:
     async def generate(self, scene: dict[str, Any], out_path: Path) -> Path:
         out_path = Path(out_path)
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        prompt = image_prompt(scene, out_path)
+        cfg = settings_store.load()
+        style_prompt = str(cfg.get("default_style_prompt") or "")
+        char_lookup = {c["id"]: c for c in char_store.list_characters() if c.get("id")}
+        prompt = image_prompt(
+            scene,
+            out_path,
+            style_prompt=style_prompt,
+            character_lookup=char_lookup,
+        )
         started = time.time()
 
         await asyncio.to_thread(

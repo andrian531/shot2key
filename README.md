@@ -81,6 +81,11 @@ shot2key/
 │   ├── tests/       # pytest: scene splitter + API
 │   └── main.py
 ├── frontend/        # Vite + React + TypeScript + Tailwind
+│   └── src/
+│       ├── router/  # / , /projects/:id , /characters , /settings
+│       ├── views/   # LibraryView, ProjectView, CharactersView, SettingsView
+│       ├── components/  # header, upload panel, storyboard, scene card
+│       └── state/   # AppContext (system status + character database)
 ├── docs/            # PLAN.md, DECISIONS.md (git-ignored)
 ├── launcher.py      # prerequisite checks, venv/npm setup, ffmpeg, run + open browser
 ├── start.bat        # Windows entry point

@@ -1,4 +1,12 @@
-import type { Project, ProjectSummary, Settings, SystemStatus } from '../types'
+import type {
+  Character,
+  Costume,
+  Project,
+  ProjectSummary,
+  SceneCharacterMapping,
+  Settings,
+  SystemStatus,
+} from '../types'
 
 const BASE = '/api'
 
@@ -49,10 +57,31 @@ export const api = {
       body: JSON.stringify({ engine }),
     }),
 
-  patchScene: (id: string, sceneId: string, patch: Record<string, string>) =>
+  patchScene: (
+    id: string,
+    sceneId: string,
+    patch: {
+      prompt?: string
+      description?: string
+      camera?: string
+      lighting?: string
+      replace_characters?: boolean
+      character_mappings?: Record<string, SceneCharacterMapping>
+    },
+  ) =>
     request<Project>(`/projects/${id}/scenes/${sceneId}`, {
       method: 'PATCH',
       body: JSON.stringify(patch),
+    }),
+
+  applyCharacters: (
+    id: string,
+    character_mappings: Record<string, SceneCharacterMapping>,
+    replace_characters = true,
+  ) =>
+    request<Project>(`/projects/${id}/apply-characters`, {
+      method: 'POST',
+      body: JSON.stringify({ character_mappings, replace_characters }),
     }),
 
   generateScene: (id: string, sceneId: string, engine: string) =>
@@ -81,4 +110,42 @@ export const api = {
   exportUrl: (id: string) => `${BASE}/projects/${id}/export`,
   keyframeUrl: (id: string, sceneId: string) => `${BASE}/projects/${id}/scenes/${sceneId}/keyframe`,
   imageUrl: (id: string, sceneId: string) => `${BASE}/projects/${id}/scenes/${sceneId}/image`,
+
+  listCharacters: () =>
+    request<{ characters: Character[] }>('/characters').then((data) => data.characters),
+
+  createCharacter: (payload: {
+    name: string
+    appearance: string
+    costumes: Array<Partial<Costume>>
+  }) =>
+    request<{ character: Character }>('/characters', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }).then((data) => data.character),
+
+  updateCharacter: (
+    charId: string,
+    payload: { name?: string; appearance?: string; costumes?: Array<Partial<Costume>> },
+  ) =>
+    request<{ character: Character }>(`/characters/${charId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }).then((data) => data.character),
+
+  deleteCharacter: (charId: string) => request<null>(`/characters/${charId}`, { method: 'DELETE' }),
+
+  async uploadCharacterImage(charId: string, file: File): Promise<Character> {
+    const form = new FormData()
+    form.append('file', file)
+    const response = await fetch(`${BASE}/characters/${charId}/image`, {
+      method: 'POST',
+      body: form,
+    })
+    if (!response.ok) throw new Error(await parseError(response))
+    const data = (await response.json()) as { character: Character }
+    return data.character
+  },
+
+  characterImageUrl: (charId: string) => `${BASE}/characters/${charId}/image`,
 }

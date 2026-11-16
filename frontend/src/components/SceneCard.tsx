@@ -1,13 +1,22 @@
 import { useEffect, useState } from 'react'
-import type { ImageEngine, Scene } from '../types'
+import { Link } from 'react-router-dom'
+import type { Character, ImageEngine, Scene, SceneCharacterMapping } from '../types'
 import { formatTime } from '../lib/format'
 
 interface Props {
   projectId: string
   scene: Scene
+  characters: Character[]
+  analyzing?: boolean
   engine: ImageEngine
   onEngineChange: (engine: ImageEngine) => void
   onSavePrompt: (sceneId: string, prompt: string) => Promise<void>
+  onUpdateSceneCharacters: (
+    sceneId: string,
+    replaceCharacters: boolean,
+    mappings: Record<string, SceneCharacterMapping>,
+  ) => Promise<void>
+  onApplyCharactersAll: (mappings: Record<string, SceneCharacterMapping>) => Promise<void>
   onGenerate: (sceneId: string) => void
   keyframeUrl: string
   imageUrl: string
@@ -32,9 +41,13 @@ const STATUS_LABEL: Record<Scene['image_status'], string> = {
 export default function SceneCard({
   projectId,
   scene,
+  characters,
+  analyzing,
   engine,
   onEngineChange,
   onSavePrompt,
+  onUpdateSceneCharacters,
+  onApplyCharactersAll,
   onGenerate,
   keyframeUrl,
   imageUrl,
@@ -61,6 +74,25 @@ export default function SceneCard({
 
   const busy = scene.image_status === 'queued' || scene.image_status === 'generating'
   const hasImage = scene.image_status === 'done'
+  const replaceEnabled = Boolean(scene.replace_characters)
+  const mappings = scene.character_mappings ?? {}
+  const detected = scene.detected_characters ?? []
+  const slots =
+    detected.length > 0
+      ? detected
+      : [{ slot: 'Char_1', description: 'Karakter utama scene ini' }]
+
+  function handleSlotChange(slot: string, characterId: string, costumeId?: string) {
+    const next = { ...mappings }
+    if (!characterId) {
+      delete next[slot]
+    } else {
+      const char = characters.find((c) => c.id === characterId)
+      const defaultCostume = costumeId ?? char?.costumes?.[0]?.id ?? ''
+      next[slot] = { character_id: characterId, costume_id: defaultCostume }
+    }
+    void onUpdateSceneCharacters(scene.id, replaceEnabled, next)
+  }
 
   return (
     <article className="card flex flex-col overflow-hidden">
@@ -129,17 +161,125 @@ export default function SceneCard({
           </p>
         )}
 
-        <label className="label mt-1">Prompt</label>
+        <div className="flex items-center justify-between">
+          <label className="label mb-0 mt-1">Prompt</label>
+          {analyzing && !scene.prompt.trim() && (
+            <span className="animate-pulse text-[11px] text-indigo-300">
+              ⏳ Menunggu analyze...
+            </span>
+          )}
+        </div>
         <textarea
           className="input min-h-[104px] resize-y font-mono text-[12px] leading-relaxed"
           value={prompt}
-          placeholder="Belum ada prompt — jalankan Analyze atau tulis manual."
+          placeholder={
+            analyzing
+              ? 'Sedang menunggu giliran analisis AI...'
+              : 'Belum ada prompt — jalankan Analyze atau tulis manual.'
+          }
           onChange={(event) => {
             setPrompt(event.target.value)
             setDirty(true)
           }}
           onBlur={commit}
         />
+
+        <div className="rounded-lg border border-ink-800 bg-ink-950/50 p-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-300">
+              <input
+                type="checkbox"
+                checked={replaceEnabled}
+                onChange={(e) =>
+                  void onUpdateSceneCharacters(scene.id, e.target.checked, mappings)
+                }
+              />
+              Replace Karakter
+              {detected.length > 0 && (
+                <span className="badge bg-ink-800 text-[10px] text-slate-400">
+                  {detected.length} terdeteksi
+                </span>
+              )}
+            </label>
+            {replaceEnabled && Object.keys(mappings).length > 0 && (
+              <button
+                type="button"
+                className="text-[11px] text-indigo-400 hover:underline"
+                onClick={() => void onApplyCharactersAll(mappings)}
+                title="Terapkan pilihan karakter & kostum ini ke semua scene yang cocok"
+              >
+                Terapkan ke semua
+              </button>
+            )}
+          </div>
+
+          {replaceEnabled && (
+            <div className="mt-2.5 space-y-2">
+              {characters.length === 0 ? (
+                <p className="text-[11px] text-slate-500">
+                  Database karakter masih kosong.{' '}
+                  <Link to="/characters" className="text-indigo-400 hover:underline">
+                    + Tambah Karakter
+                  </Link>
+                </p>
+              ) : (
+                slots.map((item) => {
+                  const current = mappings[item.slot]
+                  const selectedChar = characters.find((c) => c.id === current?.character_id)
+                  return (
+                    <div
+                      key={item.slot}
+                      className="space-y-1 rounded border border-ink-800/80 bg-ink-900/50 p-2"
+                    >
+                      <div className="flex items-center justify-between gap-2 text-[11px]">
+                        <span className="font-mono font-semibold text-indigo-300">{item.slot}</span>
+                        {item.description && (
+                          <span className="truncate text-slate-500" title={item.description}>
+                            {item.description}
+                          </span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <select
+                          className="input py-1 text-xs"
+                          value={current?.character_id ?? ''}
+                          onChange={(e) => handleSlotChange(item.slot, e.target.value)}
+                        >
+                          <option value="">-- Karakter asli --</option>
+                          {characters.map((char) => (
+                            <option key={char.id} value={char.id}>
+                              {char.name}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          className="input py-1 text-xs"
+                          disabled={!selectedChar || selectedChar.costumes.length === 0}
+                          value={current?.costume_id ?? ''}
+                          onChange={(e) =>
+                            handleSlotChange(item.slot, current?.character_id ?? '', e.target.value)
+                          }
+                        >
+                          {!selectedChar ? (
+                            <option value="">Kostum</option>
+                          ) : selectedChar.costumes.length === 0 ? (
+                            <option value="">(Tanpa kostum)</option>
+                          ) : (
+                            selectedChar.costumes.map((cos) => (
+                              <option key={cos.id} value={cos.id}>
+                                {cos.name}
+                              </option>
+                            ))
+                          )}
+                        </select>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          )}
+        </div>
 
         {scene.analysis_error && (
           <p className="rounded border border-amber-900/60 bg-amber-950/40 px-2 py-1 text-[11px] text-amber-300">

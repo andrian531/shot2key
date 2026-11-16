@@ -25,6 +25,32 @@ export interface SystemStatus {
   data_dir: string
 }
 
+export interface DetectedCharacter {
+  slot: string
+  description: string
+}
+
+export interface SceneCharacterMapping {
+  character_id: string
+  costume_id?: string
+}
+
+export interface Costume {
+  id: string
+  name: string
+  description: string
+}
+
+export interface Character {
+  id: string
+  name: string
+  appearance: string
+  reference_image: string | null
+  costumes: Costume[]
+  created_at?: string
+  updated_at?: string
+}
+
 export interface Scene {
   id: string
   index: number
@@ -38,6 +64,9 @@ export interface Scene {
   prompt: string
   camera: string
   lighting: string
+  detected_characters?: DetectedCharacter[]
+  replace_characters?: boolean
+  character_mappings?: Record<string, SceneCharacterMapping>
   engine: string | null
   image_path: string | null
   image_status: 'idle' | 'queued' | 'generating' | 'done' | 'failed'
@@ -86,4 +115,6 @@ export interface Settings {
   default_image_engine: ImageEngine
   rea_video_lang: string
   rea_video_vlm: boolean
+  auto_analyze: boolean
+  default_style_prompt: string
 }

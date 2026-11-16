@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 
 import config
 from core import jobs
-from routers import projects, settings, system
+from routers import characters, projects, settings, system
 
 __version__ = "0.1.0"
 
@@ -50,6 +50,7 @@ app.add_middleware(
 app.include_router(system.router)
 app.include_router(projects.router)
 app.include_router(settings.router)
+app.include_router(characters.router)
 
 
 @app.get("/api/health")
