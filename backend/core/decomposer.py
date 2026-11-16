@@ -192,6 +192,11 @@ def shot_last_keyframe(breakdown_dir: str | Path, shot: dict[str, Any]) -> Path 
     return _asset(breakdown_dir, shot, "last_frame")
 
 
+def shot_sheet(breakdown_dir: str | Path, shot: dict[str, Any]) -> Path | None:
+    """Absolute path of the shot's contact sheet (frames across the shot)."""
+    return _asset(breakdown_dir, shot, "sheet")
+
+
 def audio_stems(breakdown_dir: str | Path) -> list[str]:
     """Which separated audio stems rea-video produced (original/vocals/music/effects)."""
     stems_dir = Path(breakdown_dir) / "stems"

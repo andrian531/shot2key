@@ -26,6 +26,8 @@ class SceneAnalysis:
     lighting: str = ""
     characters: list[dict[str, str]] = field(default_factory=list)
     raw: str = ""
+    #: The exact prompt handed to the engine (logged for inspection).
+    prompt_sent: str = ""
     extra: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -65,7 +67,7 @@ Return ONLY a JSON object, no prose, no markdown fence, with exactly these keys:
 {
   "description": "2-4 sentences describing subject, setting, action, composition and colour",
   "prompt": "a single dense IMAGE prompt (max 90 words) that recreates this frame as a still: subject, wardrobe, props, setting, framing, lens, lighting, colour grade, mood. Whenever a main person appears, refer to them using a placeholder tag like [Char_1], [Char_2].",
-  "video_prompt": "a MOTION prompt (max 70 words) for an image-to-video model (Google Flow / Veo / Kling) that animates this still for {duration} seconds: what the subject does, how the camera moves (push in, pan, handheld, static), and how the shot ends. Describe movement only - do not repeat the static wardrobe/setting description, and do not mention cuts, text or music.",
+  "video_prompt": "a MOTION prompt of 25-45 words for Google Flow / Veo image-to-video, animating this shot for {duration} seconds. Describe exactly ONE main action as the change from the First Frame to the Last Frame, plus ONE clear camera move (push in, pull out, pan left/right, tilt, handheld drift, or locked-off), plus a few words of mood. Do NOT repeat static details already visible in the First Frame (wall colour, wardrobe, props, lens). No cuts, no text, no music, no second action.",
   "camera": "shot size + angle + lens, e.g. 'medium close-up, eye level, 50mm'",
   "lighting": "lighting setup and colour temperature in a few words",
   "characters": [
@@ -73,6 +75,27 @@ Return ONLY a JSON object, no prose, no markdown fence, with exactly these keys:
   ]
 }
 Write the values in English. If no people appear, set "characters" to []. Do not invent text overlays or logos."""
+
+
+#: Scene fields that hold a reference image, in the order the model should read them.
+SCENE_IMAGE_FIELDS: tuple[tuple[str, str], ...] = (
+    ("keyframe", "First Frame"),
+    ("last_keyframe", "Last Frame"),
+    ("sheet", "Contact Sheet (frames across the whole shot)"),
+)
+
+
+def scene_input_images(scene: dict[str, Any]) -> list[tuple[str, str]]:
+    """Existing reference images for a scene as ``[(label, path), ...]``."""
+    found: list[tuple[str, str]] = []
+    for field_name, label in SCENE_IMAGE_FIELDS:
+        value = scene.get(field_name)
+        if not value:
+            continue
+        path = Path(str(value))
+        if path.is_file():
+            found.append((label, str(path)))
+    return found
 
 
 def analyze_prompt(scene: dict[str, Any], context: dict[str, Any]) -> str:
@@ -93,10 +116,17 @@ def analyze_prompt(scene: dict[str, Any], context: dict[str, Any]) -> str:
             "The previous scene's prompt was: "
             f"{context['previous_prompt'][:400]}. Keep characters and wardrobe consistent."
         )
-    keyframe = scene.get("keyframe")
-    if keyframe:
-        lines.append(f"Reference frame file: {keyframe}")
-        lines.append("Read that image file before answering.")
+    images = scene_input_images(scene)
+    if images:
+        lines.append("")
+        lines.append("Read these image files before answering:")
+        for label, path in images:
+            lines.append(f"- {label}: {path}")
+        if len(images) > 1:
+            lines.append(
+                "Compare the First Frame with the Last Frame: the difference between "
+                "them is the motion the video prompt must describe."
+            )
     duration = scene.get("duration") or 0
     lines += ["", ANALYZE_INSTRUCTIONS.replace("{duration}", f"{float(duration):.2f}")]
     return "\n".join(lines)

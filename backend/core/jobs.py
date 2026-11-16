@@ -10,15 +10,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from pathlib import Path
 from typing import Any, Iterable
 
 import config
-from core import decomposer, media, store
+from core import decomposer, media, prompt_logger, store
 from core import settings as settings_store
 from core.scene_splitter import Scene, split_scenes
 from providers import registry
-from providers.base import ProviderError
+from providers.base import ProviderError, analyze_prompt, scene_input_images
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,7 @@ def _build_scenes(
     for shot in breakdown.get("shots") or []:
         keyframe = decomposer.shot_keyframe(breakdown_dir, shot)
         last_keyframe = decomposer.shot_last_keyframe(breakdown_dir, shot)
+        sheet = decomposer.shot_sheet(breakdown_dir, shot)
         shots.append(
             {
                 "index": shot.get("index"),
@@ -88,7 +90,7 @@ def _build_scenes(
                 "duration": shot.get("duration"),
                 "keyframe": str(keyframe) if keyframe else None,
                 "last_keyframe": str(last_keyframe) if last_keyframe else None,
-                "sheet": (shot.get("assets") or {}).get("sheet"),
+                "sheet": str(sheet) if sheet else None,
             }
         )
 
@@ -105,6 +107,7 @@ def _build_scenes(
         shot = by_index.get(scene.keyframe_shot_index) or {}
         keyframe = shot.get("keyframe")
         last_keyframe = shot.get("last_keyframe")
+        sheet = shot.get("sheet")
 
         # A split piece starts/ends mid-shot: the shot's own first/last frames
         # are the wrong reference, so cut fresh ones at the scene's edges.
@@ -139,6 +142,7 @@ def _build_scenes(
                 "is_split": scene.is_split,
                 "keyframe": keyframe,
                 "last_keyframe": last_keyframe,
+                "sheet": sheet,
                 "description": "",
                 "prompt": "",
                 "video_prompt": "",
@@ -290,10 +294,25 @@ async def _run_analyze(project_id: str, engine: str, scene_ids: Iterable[str] | 
     failures: list[str] = []
 
     for scene in targets:
+        context = _context(project, scene, previous)
+        images = [path for _, path in scene_input_images(scene)]
+        started = time.perf_counter()
         try:
-            result = await analyzer.analyze(scene, _context(project, scene, previous))
+            result = await analyzer.analyze(scene, context)
         except (ProviderError, Exception) as exc:  # noqa: BLE001
             failures.append(f"{scene.get('id')}: {exc}")
+            prompt_logger.log_event(
+                project_id,
+                scene.get("id"),
+                "analyze",
+                engine,
+                prompt_sent=analyze_prompt(scene, context),
+                raw_response="",
+                input_images=images,
+                duration_ms=int((time.perf_counter() - started) * 1000),
+                status="error",
+                error=str(exc)[:2000],
+            )
             store.mutate(
                 project_id,
                 lambda p, sid=scene.get("id"), msg=str(exc): _patch_scene(
@@ -302,6 +321,18 @@ async def _run_analyze(project_id: str, engine: str, scene_ids: Iterable[str] | 
             )
         else:
             payload = result.to_dict()
+            prompt_logger.log_event(
+                project_id,
+                scene.get("id"),
+                "analyze",
+                engine,
+                prompt_sent=result.prompt_sent or analyze_prompt(scene, context),
+                raw_response=result.raw,
+                input_images=images,
+                parsed=payload,
+                duration_ms=int((time.perf_counter() - started) * 1000),
+                status="ok",
+            )
             store.mutate(
                 project_id,
                 lambda p, sid=scene.get("id"), data=payload, eng=engine: _patch_scene(
@@ -364,11 +395,25 @@ async def _generate_one(project_id: str, scene_id: str, engine: str) -> bool:
     )
 
     generator = registry.image_generator(engine)
+    images = [path for _, path in scene_input_images(scene)]
+    started = time.perf_counter()
     async with _semaphore():
         try:
             await generator.generate(scene, out_path)
         except Exception as exc:  # noqa: BLE001
             logger.warning("generate %s gagal: %s", scene_id, exc)
+            prompt_logger.log_event(
+                project_id,
+                scene_id,
+                "generate",
+                engine,
+                prompt_sent=getattr(generator, "last_prompt", ""),
+                raw_response="",
+                input_images=images,
+                duration_ms=int((time.perf_counter() - started) * 1000),
+                status="error",
+                error=str(exc)[:2000],
+            )
             store.mutate(
                 project_id,
                 lambda p, msg=str(exc): _patch_scene(
@@ -377,6 +422,18 @@ async def _generate_one(project_id: str, scene_id: str, engine: str) -> bool:
             )
             return False
 
+    prompt_logger.log_event(
+        project_id,
+        scene_id,
+        "generate",
+        engine,
+        prompt_sent=getattr(generator, "last_prompt", ""),
+        raw_response=str(out_path),
+        input_images=images,
+        parsed={"image_path": str(out_path)},
+        duration_ms=int((time.perf_counter() - started) * 1000),
+        status="ok",
+    )
     store.mutate(
         project_id,
         lambda p: _patch_scene(

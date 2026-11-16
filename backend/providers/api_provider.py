@@ -21,6 +21,7 @@ from providers.base import (
     analysis_from_payload,
     analyze_prompt,
     extract_json,
+    scene_input_images,
 )
 
 TIMEOUT = httpx.Timeout(120.0, connect=15.0)
@@ -37,6 +38,17 @@ def _inline_image(path: str | Path | None) -> tuple[str, str] | None:
     return mime, data
 
 
+def _scene_images(scene: dict[str, Any]) -> list[tuple[str, str, str]]:
+    """First Frame, Last Frame and Contact Sheet as ``(label, mime, base64)``."""
+    images: list[tuple[str, str, str]] = []
+    for label, path in scene_input_images(scene):
+        inline = _inline_image(path)
+        if inline is not None:
+            mime, data = inline
+            images.append((label, mime, data))
+    return images
+
+
 class GeminiAnalyzer:
     name = "gemini"
 
@@ -48,10 +60,10 @@ class GeminiAnalyzer:
         if not self.api_key:
             raise ProviderError("Gemini API key belum diisi (Settings).")
 
-        parts: list[dict[str, Any]] = [{"text": analyze_prompt(scene, context)}]
-        image = _inline_image(scene.get("keyframe"))
-        if image:
-            mime, data = image
+        prompt_text = analyze_prompt(scene, context)
+        parts: list[dict[str, Any]] = [{"text": prompt_text}]
+        for label, mime, data in _scene_images(scene):
+            parts.append({"text": f"{label}:"})
             parts.append({"inline_data": {"mime_type": mime, "data": data}})
 
         url = (
@@ -76,7 +88,9 @@ class GeminiAnalyzer:
         except (KeyError, IndexError, TypeError) as exc:
             raise ProviderError(f"Jawaban Gemini tidak dikenali: {str(payload)[:300]}") from exc
 
-        return analysis_from_payload(extract_json(text), raw=text)
+        result = analysis_from_payload(extract_json(text), raw=text)
+        result.prompt_sent = prompt_text
+        return result
 
 
 class OpenAICompatibleAnalyzer:
@@ -91,10 +105,10 @@ class OpenAICompatibleAnalyzer:
         if not self.api_key:
             raise ProviderError("API key OpenAI-compatible belum diisi (Settings).")
 
-        content: list[dict[str, Any]] = [{"type": "text", "text": analyze_prompt(scene, context)}]
-        image = _inline_image(scene.get("keyframe"))
-        if image:
-            mime, data = image
+        prompt_text = analyze_prompt(scene, context)
+        content: list[dict[str, Any]] = [{"type": "text", "text": prompt_text}]
+        for label, mime, data in _scene_images(scene):
+            content.append({"type": "text", "text": f"{label}:"})
             content.append(
                 {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{data}"}}
             )
@@ -122,7 +136,9 @@ class OpenAICompatibleAnalyzer:
         except (KeyError, IndexError, TypeError) as exc:
             raise ProviderError(f"Jawaban API tidak dikenali: {str(payload)[:300]}") from exc
 
-        return analysis_from_payload(extract_json(text), raw=text)
+        result = analysis_from_payload(extract_json(text), raw=text)
+        result.prompt_sent = prompt_text
+        return result
 
 
 def build_analyzer(engine: str) -> Any:

@@ -3,6 +3,7 @@ import type {
   Costume,
   Project,
   ProjectSummary,
+  PromptLogEntry,
   SceneCharacterMapping,
   Settings,
   SystemStatus,
@@ -116,6 +117,11 @@ export const api = {
   audioStemUrl: (id: string, stem: string, download = false) =>
     `${BASE}/projects/${id}/audio/${stem}${download ? '?download=1' : ''}`,
   reportUrl: (id: string) => `${BASE}/projects/${id}/report`,
+
+  logs: (id: string, limit = 200) =>
+    request<{ logs: PromptLogEntry[] }>(`/projects/${id}/logs?limit=${limit}`).then(
+      (data) => data.logs,
+    ),
 
   listCharacters: () =>
     request<{ characters: Character[] }>('/characters').then((data) => data.characters),

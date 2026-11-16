@@ -4,6 +4,7 @@ import type {
   Engine,
   ImageEngine,
   Project,
+  PromptLogEntry,
   SceneCharacterMapping,
   SystemStatus,
 } from '../types'
@@ -84,6 +85,110 @@ function AudioReportPanel({ project }: { project: Project }) {
   )
 }
 
+function LogsPanel({ projectId, onClose }: { projectId: string; onClose: () => void }) {
+  const [logs, setLogs] = useState<PromptLogEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    api
+      .logs(projectId)
+      .then((items) => {
+        if (alive) setLogs(items)
+      })
+      .catch((err: Error) => {
+        if (alive) setError(err.message)
+      })
+      .finally(() => {
+        if (alive) setLoading(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [projectId])
+
+  return (
+    <div className="mt-3 rounded-lg border border-ink-800 bg-ink-950/60">
+      <div className="flex items-center justify-between border-b border-ink-800 px-3 py-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          Prompt &amp; Response Logs ({logs.length})
+        </span>
+        <button className="text-[11px] text-slate-500 hover:text-slate-300" onClick={onClose}>
+          tutup ✕
+        </button>
+      </div>
+
+      {loading ? (
+        <p className="p-3 text-xs text-slate-500">Memuat log...</p>
+      ) : error ? (
+        <p className="p-3 text-xs text-rose-300">{error}</p>
+      ) : logs.length === 0 ? (
+        <p className="p-3 text-xs text-slate-500">
+          Belum ada log. Jalankan Analyze atau Generate untuk merekam prompt &amp; respons.
+        </p>
+      ) : (
+        <div className="max-h-[420px] divide-y divide-ink-800/70 overflow-y-auto">
+          {logs.map((entry, index) => (
+            <details key={`${entry.timestamp}-${index}`} className="px-3 py-2">
+              <summary className="flex cursor-pointer flex-wrap items-center gap-2 text-[11px]">
+                <span
+                  className={`badge ${
+                    entry.status === 'ok'
+                      ? 'bg-emerald-950/60 text-emerald-300'
+                      : 'bg-rose-950/60 text-rose-300'
+                  }`}
+                >
+                  {entry.status}
+                </span>
+                <span className="font-mono text-slate-400">{entry.action}</span>
+                <span className="text-slate-300">{entry.scene_id ?? '—'}</span>
+                <span className="text-slate-500">{entry.engine}</span>
+                <span className="font-mono text-slate-500">{entry.duration_ms} ms</span>
+                <span className="ml-auto font-mono text-[10px] text-slate-600">
+                  {entry.timestamp}
+                </span>
+              </summary>
+              <div className="mt-2 space-y-2 text-[11px]">
+                {entry.error && (
+                  <p className="rounded border border-rose-900/60 bg-rose-950/40 px-2 py-1 text-rose-300">
+                    {entry.error}
+                  </p>
+                )}
+                {entry.input_images.length > 0 && (
+                  <div>
+                    <div className="label mb-1">input images</div>
+                    <ul className="space-y-0.5 font-mono text-[10px] text-slate-400">
+                      {entry.input_images.map((image) => (
+                        <li key={image} className="truncate" title={image}>
+                          {image}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <div>
+                  <div className="label mb-1">prompt sent</div>
+                  <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-ink-900 p-2 font-mono text-[10px] text-slate-300">
+                    {entry.prompt_sent || '—'}
+                  </pre>
+                </div>
+                <div>
+                  <div className="label mb-1">raw response</div>
+                  <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-ink-900 p-2 font-mono text-[10px] text-slate-300">
+                    {entry.raw_response || '—'}
+                  </pre>
+                </div>
+              </div>
+            </details>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Progress({ project }: { project: Project }) {
   const percent = project.progress?.percent ?? 0
   return (
@@ -125,6 +230,7 @@ export default function Storyboard({
 }: Props) {
   const scenes = [...(project.scenes ?? [])].sort((a, b) => a.start_time - b.start_time)
   const [selectedId, setSelectedId] = useState<string | null>(scenes[0]?.id ?? null)
+  const [logsOpen, setLogsOpen] = useState(false)
 
   useEffect(() => {
     if (scenes.length === 0) {
@@ -205,6 +311,14 @@ export default function Storyboard({
               </button>
             </div>
 
+            <button
+              className="btn-ghost py-1.5 text-xs"
+              onClick={() => setLogsOpen((open) => !open)}
+              title="Lihat prompt yang dikirim dan respons mentah AI"
+            >
+              Logs
+            </button>
+
             <button className="btn-ghost py-1.5 text-xs" disabled={!scenes.length} onClick={onExport}>
               ⬇ Export ZIP
             </button>
@@ -214,6 +328,10 @@ export default function Storyboard({
         {project.status === 'decomposing' && <Progress project={project} />}
 
         {ready && <AudioReportPanel project={project} />}
+
+        {logsOpen && (
+          <LogsPanel projectId={project.id} onClose={() => setLogsOpen(false)} />
+        )}
 
         {analyzing && (
           <div className="mt-3">

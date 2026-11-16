@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 import config
-from core import exporter, jobs, store
+from core import exporter, jobs, prompt_logger, store
 from providers.base import ProviderError
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -133,6 +133,7 @@ def delete_project(project_id: str) -> Response:
     ):
         if directory.is_dir():
             shutil.rmtree(directory, ignore_errors=True)
+    prompt_logger.clear_logs(project_id)
     return Response(status_code=204)
 
 
@@ -290,6 +291,13 @@ def project_report(project_id: str) -> FileResponse:
     if not path.is_file():
         raise HTTPException(status_code=404, detail="report.html tidak tersedia")
     return FileResponse(path, media_type="text/html")
+
+
+@router.get("/{project_id}/logs")
+def project_logs(project_id: str, limit: int = 200) -> dict[str, Any]:
+    """Prompt/response log for this project, newest first."""
+    _load(project_id)
+    return {"logs": prompt_logger.read_logs(project_id, limit=limit)}
 
 
 @router.get("/{project_id}/export")

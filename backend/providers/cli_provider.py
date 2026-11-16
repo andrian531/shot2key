@@ -159,7 +159,9 @@ class CliAnalyzer:
         text = await asyncio.to_thread(
             run_cli, self.name, prompt, workdir, config.ANALYZE_TIMEOUT
         )
-        return analysis_from_payload(extract_json(text), raw=text)
+        result = analysis_from_payload(extract_json(text), raw=text)
+        result.prompt_sent = prompt
+        return result
 
 
 class CliImageGenerator:
@@ -167,6 +169,8 @@ class CliImageGenerator:
 
     def __init__(self, engine: str) -> None:
         self.name = engine
+        #: Prompt of the most recent call, read by the job runner for logging.
+        self.last_prompt = ""
 
     async def generate(self, scene: dict[str, Any], out_path: Path) -> Path:
         out_path = Path(out_path)
@@ -180,6 +184,7 @@ class CliImageGenerator:
             style_prompt=style_prompt,
             character_lookup=char_lookup,
         )
+        self.last_prompt = prompt
         started = time.time()
 
         await asyncio.to_thread(

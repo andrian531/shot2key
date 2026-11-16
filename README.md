@@ -50,8 +50,10 @@ http://localhost:5173.
    3 s scene. Only a shot longer than `max_scene_seconds` (default 10, configurable 5/8/10 in
    Settings) is cut into equal pieces, and fresh first/last frames are extracted at the piece's own
    edges.
-4. **Analyze** sends each scene's reference frame to the chosen engine and stores description,
-   `prompt` (image / First Frame) and `video_prompt` (motion for Google Flow / Veo),
+4. **Analyze** sends the scene's **First Frame + Last Frame + contact sheet** to the chosen engine
+   and stores description, `prompt` (image / First Frame) and `video_prompt` (25–45 word motion
+   prompt for Google Flow / Veo). Every call is logged to `data/logs/{project_id}.jsonl` and can be
+   inspected from the **Logs** panel in the UI.
    camera and lighting notes.
 5. **Generate** calls `agy` or `codex` per scene (or *Generate All*) with a prompt that names the exact
    output path; results land in `backend/outputs/{project_id}/scenes/`.
@@ -71,6 +73,7 @@ http://localhost:5173.
 | GET | `/api/projects/{id}/scenes/{scene_id}/last-keyframe` | last frame (First+Last mode) |
 | GET | `/api/projects/{id}/audio/{stem}` | `original` / `vocals` / `music` / `effects` |
 | GET | `/api/projects/{id}/report` | rea-video `report.html` |
+| GET | `/api/projects/{id}/logs` | prompt/response log (JSONL, newest first) |
 | POST | `/api/projects/{id}/scenes/{scene_id}/generate` | `{engine: agy\|codex}` |
 | POST | `/api/projects/{id}/generate-all` | queue every scene that has a prompt |
 | GET | `/api/projects/{id}/export` | ZIP bundle |

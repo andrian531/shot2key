@@ -76,6 +76,20 @@ export interface Scene {
   analysis_error: string | null
 }
 
+export interface PromptLogEntry {
+  timestamp: string
+  scene_id: string | null
+  action: string
+  engine: string
+  input_images: string[]
+  prompt_sent: string
+  raw_response: string
+  parsed: Record<string, unknown> | null
+  duration_ms: number
+  status: string
+  error: string | null
+}
+
 export interface Project {
   id: string
   filename: string

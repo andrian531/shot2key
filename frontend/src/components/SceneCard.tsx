@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Character, ImageEngine, Scene, SceneCharacterMapping } from '../types'
 import { formatTime } from '../lib/format'
+import { resolveVideoPrompt } from '../lib/prompts'
 
 export interface ScenePromptPatch {
   prompt?: string
@@ -44,7 +45,15 @@ const STATUS_LABEL: Record<Scene['image_status'], string> = {
   failed: 'gagal',
 }
 
-function CopyButton({ text, label }: { text: string; label: string }) {
+function CopyButton({
+  text,
+  label,
+  caption = 'Copy',
+}: {
+  text: string
+  label: string
+  caption?: string
+}) {
   const [copied, setCopied] = useState(false)
 
   async function copy() {
@@ -72,7 +81,7 @@ function CopyButton({ text, label }: { text: string; label: string }) {
       onClick={copy}
       title={`Copy ${label}`}
     >
-      {copied ? '✓ Copied' : 'Copy'}
+      {copied ? '✓ Copied' : caption}
     </button>
   )
 }
@@ -114,6 +123,8 @@ export default function SceneCard({
     }
   }
 
+  const resolvedVideoPrompt = resolveVideoPrompt(videoPrompt, scene, characters)
+  const canResolve = resolvedVideoPrompt !== videoPrompt
   const busy = scene.image_status === 'queued' || scene.image_status === 'generating'
   const hasImage = scene.image_status === 'done'
   const hasLast = Boolean(scene.last_keyframe)
@@ -236,7 +247,16 @@ export default function SceneCard({
 
         <div className="mt-1 flex items-center justify-between gap-2">
           <label className="label mb-0">Video Motion Prompt (Google Flow)</label>
-          <CopyButton text={videoPrompt} label="video prompt" />
+          <div className="flex items-center gap-1.5">
+            {canResolve && (
+              <CopyButton
+                text={resolvedVideoPrompt}
+                label="resolved video prompt"
+                caption="Copy Resolved"
+              />
+            )}
+            <CopyButton text={videoPrompt} label="video prompt" />
+          </div>
         </div>
         <textarea
           className="input min-h-[76px] resize-y font-mono text-[12px] leading-relaxed"
