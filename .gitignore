@@ -13,11 +13,13 @@ __pycache__/
 # Node / Frontend
 frontend/node_modules/
 frontend/dist/
+frontend/.vite/
 npm-debug.log*
 
 # Environment & secrets
 .env
 .env.*
+backend/data/settings.json
 
 # Runtime data & generated media
 backend/data/
@@ -28,7 +30,12 @@ backend/outputs/
 *.mkv
 *.png
 *.jpg
+*.jpeg
 *.webp
+*.ass
+*.srt
+*.zip
+out/
 
 # OS / IDE
 .DS_Store
