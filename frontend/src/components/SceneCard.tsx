@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import type { Character, ImageEngine, Scene, SceneCharacterMapping } from '../types'
 import { formatTime } from '../lib/format'
-import { resolveVideoPrompt } from '../lib/prompts'
+import { formatPromptForMode } from '../lib/prompts'
 
 export interface ScenePromptPatch {
   prompt?: string
+  last_prompt?: string
   video_prompt?: string
 }
 
@@ -23,16 +23,18 @@ interface Props {
     mappings: Record<string, SceneCharacterMapping>,
   ) => Promise<void>
   onApplyCharactersAll: (mappings: Record<string, SceneCharacterMapping>) => Promise<void>
-  onGenerate: (sceneId: string) => void
+  onDeepAnalyze: (sceneId: string) => void
+  onGenerate: (sceneId: string, target?: 'first' | 'last' | 'both') => void
   keyframeUrl: string
   lastKeyframeUrl: string
   imageUrl: string
+  lastImageUrl: string
 }
 
 const STATUS_STYLE: Record<Scene['image_status'], string> = {
-  idle: 'bg-ink-800 text-slate-400',
+  idle: 'bg-ink-800 text-slate-300',
   queued: 'bg-amber-950/60 text-amber-300',
-  generating: 'bg-indigo-950/70 text-indigo-300',
+  generating: 'bg-amber-950/70 text-amber-200',
   done: 'bg-emerald-950/60 text-emerald-300',
   failed: 'bg-rose-950/60 text-rose-300',
 }
@@ -61,7 +63,6 @@ function CopyButton({
     try {
       await navigator.clipboard.writeText(text)
     } catch {
-      // Clipboard API needs a secure context; fall back to a hidden textarea.
       const area = document.createElement('textarea')
       area.value = text
       document.body.appendChild(area)
@@ -76,12 +77,12 @@ function CopyButton({
   return (
     <button
       type="button"
-      className="rounded border border-ink-700 bg-ink-850 px-2 py-0.5 text-[10px] font-medium text-slate-300 hover:bg-ink-800 disabled:opacity-40"
+      className="rounded border border-ink-700 bg-ink-850 px-2.5 py-0.5 text-[11px] font-medium text-slate-200 hover:bg-ink-800 disabled:opacity-40"
       disabled={!text.trim()}
       onClick={copy}
       title={`Copy ${label}`}
     >
-      {copied ? '✓ Copied' : caption}
+      {copied ? 'Copied' : caption}
     </button>
   )
 }
@@ -95,84 +96,98 @@ export default function SceneCard({
   onEngineChange,
   onSavePrompt,
   onUpdateSceneCharacters,
-  onApplyCharactersAll,
+  onDeepAnalyze,
   onGenerate,
   keyframeUrl,
   lastKeyframeUrl,
   imageUrl,
+  lastImageUrl,
 }: Props) {
   const [prompt, setPrompt] = useState(scene.prompt)
+  const [lastPrompt, setLastPrompt] = useState(scene.last_prompt ?? '')
   const [videoPrompt, setVideoPrompt] = useState(scene.video_prompt ?? '')
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
 
   useEffect(() => {
     setPrompt(scene.prompt)
+    setLastPrompt(scene.last_prompt ?? '')
     setVideoPrompt(scene.video_prompt ?? '')
     setDirty(false)
-  }, [scene.prompt, scene.video_prompt])
+  }, [scene.prompt, scene.last_prompt, scene.video_prompt])
 
   async function commit() {
     if (!dirty) return
     setSaving(true)
     try {
-      await onSavePrompt(scene.id, { prompt, video_prompt: videoPrompt })
+      await onSavePrompt(scene.id, {
+        prompt,
+        last_prompt: lastPrompt,
+        video_prompt: videoPrompt,
+      })
       setDirty(false)
     } finally {
       setSaving(false)
     }
   }
 
-  const resolvedVideoPrompt = resolveVideoPrompt(videoPrompt, scene, characters)
-  const canResolve = resolvedVideoPrompt !== videoPrompt
-  const busy = scene.image_status === 'queued' || scene.image_status === 'generating'
-  const hasImage = scene.image_status === 'done'
-  const hasLast = Boolean(scene.last_keyframe)
   const replaceEnabled = Boolean(scene.replace_characters)
-  const mappings = scene.character_mappings ?? {}
   const detected = scene.detected_characters ?? []
-  const slots =
-    detected.length > 0
-      ? detected
-      : [{ slot: 'Char_1', description: 'Karakter utama scene ini' }]
+  const displayFirstPrompt = formatPromptForMode(prompt, scene, characters)
+  const displayLastPrompt = formatPromptForMode(lastPrompt, scene, characters)
+  const displayVideoPrompt = formatPromptForMode(videoPrompt, scene, characters)
 
-  function handleSlotChange(slot: string, characterId: string, costumeId?: string) {
-    const next = { ...mappings }
-    if (!characterId) {
-      delete next[slot]
-    } else {
-      const char = characters.find((c) => c.id === characterId)
-      const defaultCostume = costumeId ?? char?.costumes?.[0]?.id ?? ''
-      next[slot] = { character_id: characterId, costume_id: defaultCostume }
-    }
-    void onUpdateSceneCharacters(scene.id, replaceEnabled, next)
-  }
+  const busyFirst = scene.image_status === 'queued' || scene.image_status === 'generating'
+  const busyLast = scene.last_image_status === 'queued' || scene.last_image_status === 'generating'
+  const busyAny = busyFirst || busyLast
+  const hasFirstGen = scene.image_status === 'done'
+  const hasLastGen = scene.last_image_status === 'done'
+  const hasLastRef = Boolean(scene.last_keyframe)
+  const deepBusy = Boolean(scene.deep_analyzing)
+  const timeline = scene.deep_timeline ?? []
 
   return (
-    <article className="card flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between gap-2 border-b border-ink-800 px-4 py-2.5">
-        <div className="flex items-baseline gap-2">
+    <article className="card flex flex-col overflow-hidden" data-project={projectId}>
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink-800 px-4 py-3">
+        <div className="flex items-baseline gap-2.5">
           <span className="text-sm font-semibold text-strong">
             Scene {String(scene.index).padStart(2, '0')}
           </span>
-          <span className="font-mono text-[11px] text-slate-500">
+          <span className="font-mono text-xs text-slate-300">
             {formatTime(scene.start_time)} → {formatTime(scene.end_time)}
           </span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="badge bg-ink-800 text-slate-400">{scene.duration.toFixed(2)}s</span>
+          <span className="badge bg-ink-800 text-slate-200">{scene.duration.toFixed(2)}s</span>
           {scene.is_split && (
-            <span className="badge bg-ink-800 text-slate-500" title="Potongan dari shot yang lebih panjang">
+            <span className="badge bg-ink-800 text-slate-300" title="Potongan dari shot panjang">
               split
             </span>
           )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="btn-ghost py-1 text-xs"
+            disabled={deepBusy || analyzing}
+            onClick={() => onDeepAnalyze(scene.id)}
+            title="Ekstrak frame per 0.5 detik untuk analisis ekspresi, gestur & prompt lebih detail"
+          >
+            {deepBusy ? 'Deep Analyzing (0.5s)...' : 'Deep Analyze (0.5s)'}
+          </button>
           <span className={`badge ${STATUS_STYLE[scene.image_status]}`}>
-            {STATUS_LABEL[scene.image_status]}
+            First: {STATUS_LABEL[scene.image_status]}
           </span>
+          {scene.last_image_status && scene.last_image_status !== 'idle' && (
+            <span className={`badge ${STATUS_STYLE[scene.last_image_status]}`}>
+              Last: {STATUS_LABEL[scene.last_image_status]}
+            </span>
+          )}
         </div>
       </div>
 
-      <div className={`grid gap-px bg-ink-800 ${hasLast ? 'grid-cols-3' : 'grid-cols-2'}`}>
+      {/* Visual Strip: Referensi (First & Last) + Keyframe Hasil Generate (First & Last) */}
+      <div className="grid grid-cols-2 gap-px bg-ink-800 xl:grid-cols-4">
         <figure className="relative bg-ink-950">
           <img
             src={keyframeUrl}
@@ -180,226 +195,269 @@ export default function SceneCard({
             className="aspect-video w-full object-cover"
             loading="lazy"
           />
-          <figcaption className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-slate-300">
-            referensi (first)
+          <figcaption className="absolute bottom-1.5 left-1.5 rounded bg-black/80 px-2 py-0.5 text-[11px] font-medium text-slate-200">
+            Referensi First
           </figcaption>
         </figure>
 
-        {hasLast && (
-          <figure className="relative bg-ink-950">
+        <figure className="relative bg-ink-950">
+          {hasLastRef ? (
             <img
               src={lastKeyframeUrl}
               alt={`Referensi last frame scene ${scene.index}`}
               className="aspect-video w-full object-cover"
               loading="lazy"
             />
-            <figcaption className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-slate-300">
-              referensi (last)
-            </figcaption>
-          </figure>
-        )}
+          ) : (
+            <div className="grid aspect-video w-full place-items-center text-xs text-slate-400">
+              tidak ada last frame
+            </div>
+          )}
+          <figcaption className="absolute bottom-1.5 left-1.5 rounded bg-black/80 px-2 py-0.5 text-[11px] font-medium text-slate-200">
+            Referensi Last
+          </figcaption>
+        </figure>
 
         <figure className="relative bg-ink-950">
-          {hasImage ? (
+          {hasFirstGen ? (
             <img
               src={imageUrl}
-              alt={`Keyframe scene ${scene.index}`}
+              alt={`Generated first keyframe scene ${scene.index}`}
               className="aspect-video w-full object-cover"
               loading="lazy"
             />
           ) : (
-            <div className="grid aspect-video w-full place-items-center text-[11px] text-slate-600">
-              {busy ? 'menggenerate...' : analyzing ? 'menunggu analyze...' : 'belum ada keyframe'}
+            <div className="grid aspect-video w-full place-items-center text-xs text-slate-400">
+              {busyFirst ? 'menggenerate first...' : analyzing || deepBusy ? 'menganalisis...' : 'belum ada keyframe'}
             </div>
           )}
-          <figcaption className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-slate-300">
-            keyframe
+          <figcaption className="absolute bottom-1.5 left-1.5 rounded bg-black/80 px-2 py-0.5 text-[11px] font-medium text-amber-300">
+            Keyframe First
+          </figcaption>
+        </figure>
+
+        <figure className="relative bg-ink-950">
+          {hasLastGen ? (
+            <img
+              src={lastImageUrl}
+              alt={`Generated last keyframe scene ${scene.index}`}
+              className="aspect-video w-full object-cover"
+              loading="lazy"
+            />
+          ) : (
+            <div className="grid aspect-video w-full place-items-center text-xs text-slate-400">
+              {busyLast ? 'menggenerate last...' : 'belum ada last keyframe'}
+            </div>
+          )}
+          <figcaption className="absolute bottom-1.5 left-1.5 rounded bg-black/80 px-2 py-0.5 text-[11px] font-medium text-amber-300">
+            Keyframe Last
           </figcaption>
         </figure>
       </div>
 
-      <div className="flex flex-1 flex-col gap-2 p-4">
-        {scene.description && (
-          <p className="text-[12px] leading-relaxed text-slate-400">{scene.description}</p>
-        )}
-        {(scene.camera || scene.lighting) && (
-          <p className="text-[11px] text-slate-500">
-            {scene.camera && <span>📷 {scene.camera}</span>}
-            {scene.camera && scene.lighting && <span> · </span>}
-            {scene.lighting && <span>💡 {scene.lighting}</span>}
-          </p>
-        )}
-
-        <div className="mt-1 flex items-center justify-between gap-2">
-          <label className="label mb-0">Image Prompt (keyframe / first frame)</label>
-          <CopyButton text={prompt} label="image prompt" />
-        </div>
-        <textarea
-          className="input min-h-[92px] resize-y font-mono text-[12px] leading-relaxed"
-          value={prompt}
-          placeholder="Belum ada prompt — jalankan Analyze atau tulis manual."
-          onChange={(event) => {
-            setPrompt(event.target.value)
-            setDirty(true)
-          }}
-          onBlur={commit}
-        />
-
-        <div className="mt-1 flex items-center justify-between gap-2">
-          <label className="label mb-0">Video Motion Prompt (Google Flow)</label>
-          <div className="flex items-center gap-1.5">
-            {canResolve && (
-              <CopyButton
-                text={resolvedVideoPrompt}
-                label="resolved video prompt"
-                caption="Copy Resolved"
-              />
+      <div className="flex flex-1 flex-col gap-4 p-4">
+        {/* Summary & Technical Metadata (no emoji decoration) */}
+        {(scene.description || scene.camera || scene.lighting) && (
+          <div className="space-y-1.5 border-b border-ink-800 pb-3">
+            {scene.description && (
+              <p className="text-xs leading-relaxed text-slate-200">{scene.description}</p>
             )}
-            <CopyButton text={videoPrompt} label="video prompt" />
-          </div>
-        </div>
-        <textarea
-          className="input min-h-[76px] resize-y font-mono text-[12px] leading-relaxed"
-          value={videoPrompt}
-          placeholder="Gerakan subjek & kamera untuk image-to-video — jalankan Analyze untuk mengisinya."
-          onChange={(event) => {
-            setVideoPrompt(event.target.value)
-            setDirty(true)
-          }}
-          onBlur={commit}
-        />
-
-        <div className="rounded-lg border border-ink-800 bg-ink-950/50 p-2.5">
-          <div className="flex items-center justify-between gap-2">
-            <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-300">
-              <input
-                type="checkbox"
-                checked={replaceEnabled}
-                onChange={(e) =>
-                  void onUpdateSceneCharacters(scene.id, e.target.checked, mappings)
-                }
-              />
-              Replace Karakter
-              {detected.length > 0 && (
-                <span className="badge bg-ink-800 text-[10px] text-slate-400">
-                  {detected.length} terdeteksi
-                </span>
-              )}
-            </label>
-            {replaceEnabled && Object.keys(mappings).length > 0 && (
-              <button
-                type="button"
-                className="text-[11px] text-indigo-400 hover:underline"
-                onClick={() => void onApplyCharactersAll(mappings)}
-                title="Terapkan pilihan karakter & kostum ini ke semua scene yang cocok"
-              >
-                Terapkan ke semua
-              </button>
+            {(scene.camera || scene.lighting) && (
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-300">
+                {scene.camera && (
+                  <span>
+                    <strong className="text-slate-400">Kamera:</strong> {scene.camera}
+                  </span>
+                )}
+                {scene.lighting && (
+                  <span>
+                    <strong className="text-slate-400">Cahaya:</strong> {scene.lighting}
+                  </span>
+                )}
+              </div>
             )}
           </div>
+        )}
 
-          {replaceEnabled && (
-            <div className="mt-2.5 space-y-2">
-              {characters.length === 0 ? (
-                <p className="text-[11px] text-slate-500">
-                  Database karakter masih kosong.{' '}
-                  <Link to="/characters" className="text-indigo-400 hover:underline">
-                    + Tambah Karakter
-                  </Link>
-                </p>
-              ) : (
-                slots.map((item) => {
-                  const current = mappings[item.slot]
-                  const selectedChar = characters.find((c) => c.id === current?.character_id)
-                  return (
-                    <div
-                      key={item.slot}
-                      className="space-y-1 rounded border border-ink-800/80 bg-ink-900/50 p-2"
-                    >
-                      <div className="flex items-center justify-between gap-2 text-[11px]">
-                        <span className="font-mono font-semibold text-indigo-300">{item.slot}</span>
-                        {item.description && (
-                          <span className="truncate text-slate-500" title={item.description}>
-                            {item.description}
-                          </span>
-                        )}
+        {/* Deep Timeline (collapsible) */}
+        {timeline.length > 0 && (
+          <details className="rounded-lg border border-ink-800 bg-ink-950/70">
+            <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-amber-300">
+              Timeline Detail per 0.5s ({timeline.length} beat)
+            </summary>
+            <div className="divide-y divide-ink-800/70 border-t border-ink-800 px-3 py-1">
+              {timeline.map((beat, idx) => (
+                <div key={`${beat.time}-${idx}`} className="grid gap-1 py-2 text-xs md:grid-cols-[64px_1fr]">
+                  <span className="font-mono text-amber-300">{beat.time}</span>
+                  <div className="space-y-0.5 text-slate-200">
+                    {beat.action && <div>Aksi: {beat.action}</div>}
+                    {beat.expression && <div className="text-slate-300">Ekspresi: {beat.expression}</div>}
+                    {(beat.camera || beat.background) && (
+                      <div className="text-slate-400">
+                        {beat.camera ? `Kamera: ${beat.camera}` : ''}
+                        {beat.camera && beat.background ? ' · ' : ''}
+                        {beat.background ? `Latar: ${beat.background}` : ''}
                       </div>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <select
-                          className="input py-1 text-xs"
-                          value={current?.character_id ?? ''}
-                          onChange={(e) => handleSlotChange(item.slot, e.target.value)}
-                        >
-                          <option value="">-- Karakter asli --</option>
-                          {characters.map((char) => (
-                            <option key={char.id} value={char.id}>
-                              {char.name}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          className="input py-1 text-xs"
-                          disabled={!selectedChar || selectedChar.costumes.length === 0}
-                          value={current?.costume_id ?? ''}
-                          onChange={(e) =>
-                            handleSlotChange(item.slot, current?.character_id ?? '', e.target.value)
-                          }
-                        >
-                          {!selectedChar ? (
-                            <option value="">Kostum</option>
-                          ) : selectedChar.costumes.length === 0 ? (
-                            <option value="">(Tanpa kostum)</option>
-                          ) : (
-                            selectedChar.costumes.map((cos) => (
-                              <option key={cos.id} value={cos.id}>
-                                {cos.name}
-                              </option>
-                            ))
-                          )}
-                        </select>
-                      </div>
-                    </div>
-                  )
-                })
-              )}
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
+          </details>
+        )}
+
+        {/* Replace Karakter Toggle: Natural vs [Char_N] */}
+        <div className="rounded-lg border border-ink-800 bg-ink-950/60 px-3 py-2.5">
+          <label className="flex cursor-pointer flex-wrap items-center gap-2 text-xs font-medium text-slate-200">
+            <input
+              type="checkbox"
+              checked={replaceEnabled}
+              onChange={(e) =>
+                void onUpdateSceneCharacters(scene.id, e.target.checked, scene.character_mappings ?? {})
+              }
+            />
+            Replace Karakter (tampilkan tag [Char_1], [Char_2] untuk manual di Google Flow)
+            {detected.length > 0 && (
+              <span className="badge bg-ink-800 text-[11px] text-slate-300">
+                {detected.length} terdeteksi
+              </span>
+            )}
+          </label>
+          {replaceEnabled && detected.length > 0 && (
+            <ul className="mt-2 space-y-1 border-t border-ink-800/80 pt-2 text-xs text-slate-300">
+              {detected.map((char) => (
+                <li key={char.slot} className="flex gap-2">
+                  <span className="font-mono font-semibold text-amber-300">[{char.slot}]</span>
+                  <span>{char.description}</span>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
 
+        {/* 3 Prompt Columns */}
+        <div className="grid gap-4 xl:grid-cols-3">
+          {/* 1. First Keyframe Prompt */}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <label className="label mb-0">1. First Keyframe Prompt</label>
+              <CopyButton text={displayFirstPrompt} label="first keyframe prompt" />
+            </div>
+            <textarea
+              className="input min-h-[120px] flex-1 resize-y font-mono text-xs leading-relaxed"
+              value={replaceEnabled ? prompt : displayFirstPrompt}
+              placeholder={
+                analyzing || deepBusy
+                  ? 'Sedang menganalisis...'
+                  : 'Prompt untuk gambar First Frame...'
+              }
+              onChange={(event) => {
+                setPrompt(event.target.value)
+                setDirty(true)
+              }}
+              onBlur={commit}
+            />
+          </div>
+
+          {/* 2. Last Keyframe Prompt */}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <label className="label mb-0">2. Last Keyframe Prompt</label>
+              <CopyButton text={displayLastPrompt} label="last keyframe prompt" />
+            </div>
+            <textarea
+              className="input min-h-[120px] flex-1 resize-y font-mono text-xs leading-relaxed"
+              value={replaceEnabled ? lastPrompt : displayLastPrompt}
+              placeholder={
+                analyzing || deepBusy
+                  ? 'Sedang menganalisis...'
+                  : 'Prompt untuk gambar Last Frame...'
+              }
+              onChange={(event) => {
+                setLastPrompt(event.target.value)
+                setDirty(true)
+              }}
+              onBlur={commit}
+            />
+          </div>
+
+          {/* 3. Video Prompt (Omni 1.2 Flash / Veo 3.1 Lite) */}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <label className="label mb-0 text-amber-300">
+                3. Video Prompt (Omni 1.2 / Veo 3.1 Lite)
+              </label>
+              <CopyButton text={displayVideoPrompt} label="video prompt" />
+            </div>
+            <textarea
+              className="input min-h-[120px] flex-1 resize-y font-mono text-xs leading-relaxed"
+              value={replaceEnabled ? videoPrompt : displayVideoPrompt}
+              placeholder="Gerakan subjek, kamera, dan audio cue untuk Google Flow..."
+              onChange={(event) => {
+                setVideoPrompt(event.target.value)
+                setDirty(true)
+              }}
+              onBlur={commit}
+            />
+          </div>
+        </div>
+
+        {/* Errors */}
         {scene.analysis_error && (
-          <p className="rounded border border-amber-900/60 bg-amber-950/40 px-2 py-1 text-[11px] text-amber-300">
+          <p className="rounded border border-amber-900/60 bg-amber-950/40 px-2.5 py-1.5 text-xs text-amber-300">
             Analyze: {scene.analysis_error}
           </p>
         )}
         {scene.image_error && (
-          <p className="rounded border border-rose-900/60 bg-rose-950/40 px-2 py-1 text-[11px] text-rose-300">
-            {scene.image_error}
+          <p className="rounded border border-rose-900/60 bg-rose-950/40 px-2.5 py-1.5 text-xs text-rose-300">
+            First Keyframe: {scene.image_error}
+          </p>
+        )}
+        {scene.last_image_error && (
+          <p className="rounded border border-rose-900/60 bg-rose-950/40 px-2.5 py-1.5 text-xs text-rose-300">
+            Last Keyframe: {scene.last_image_error}
           </p>
         )}
 
-        <div className="mt-auto flex items-center gap-2 pt-1">
+        {/* Action Bar */}
+        <div className="flex flex-wrap items-center gap-2 border-t border-ink-800 pt-3">
           <select
             className="input w-auto py-1.5 text-xs"
             value={engine}
             onChange={(event) => onEngineChange(event.target.value as ImageEngine)}
-            title="Engine untuk scene ini"
+            title="Image Engine untuk scene ini"
           >
             <option value="agy">agy</option>
             <option value="codex">codex</option>
           </select>
+
           <button
-            className="btn-primary flex-1 py-1.5 text-xs"
-            disabled={busy || !prompt.trim()}
-            onClick={async () => {
-              await commit()
-              onGenerate(scene.id)
-            }}
+            type="button"
+            className="btn-ghost py-1.5 text-xs"
+            disabled={!prompt.trim() || busyAny || saving}
+            onClick={() => onGenerate(scene.id, 'first')}
           >
-            {busy ? 'Bekerja...' : hasImage ? 'Regenerate' : 'Generate Image'}
+            {busyFirst ? 'Generating First...' : hasFirstGen ? 'Regenerate First' : 'Generate First'}
           </button>
-          {saving && <span className="text-[10px] text-slate-500">menyimpan…</span>}
+
+          <button
+            type="button"
+            className="btn-ghost py-1.5 text-xs"
+            disabled={!(lastPrompt.trim() || prompt.trim()) || busyAny || saving}
+            onClick={() => onGenerate(scene.id, 'last')}
+          >
+            {busyLast ? 'Generating Last...' : hasLastGen ? 'Regenerate Last' : 'Generate Last'}
+          </button>
+
+          <button
+            type="button"
+            className="btn-primary ml-auto py-1.5 text-xs"
+            disabled={!prompt.trim() || busyAny || saving}
+            onClick={() => onGenerate(scene.id, 'both')}
+          >
+            {busyAny ? 'Generating...' : 'Generate Both (First + Last)'}
+          </button>
         </div>
-        <p className="text-[10px] text-slate-600">project {projectId}</p>
       </div>
     </article>
   )

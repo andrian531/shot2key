@@ -1,11 +1,30 @@
 import type { Character, Scene } from '../types'
 
 /**
- * Replace `[Char_N]` placeholders in a motion prompt with the mapped character
- * and costume, mirroring `resolve_video_prompt()` on the backend.
- *
- * Returns the text unchanged when Replace Karakter is off or nothing is mapped.
+ * Replace `[Char_N]` with natural descriptions when `replace_characters` is OFF,
+ * or keep `[Char_N]` tags (or mapped characters) when `replace_characters` is ON.
  */
+export function formatPromptForMode(
+  text: string,
+  scene: Scene,
+  characters: Character[] = [],
+): string {
+  if (!text.trim()) return text
+
+  if (!scene.replace_characters) {
+    let natural = text
+    for (const item of scene.detected_characters ?? []) {
+      const slot = item.slot?.trim()
+      const desc = item.description?.trim()
+      if (!slot || !desc) continue
+      natural = natural.split(`[${slot}]`).join(desc)
+    }
+    return natural
+  }
+
+  return resolveVideoPrompt(text, scene, characters)
+}
+
 export function resolveVideoPrompt(
   text: string,
   scene: Scene,

@@ -24,12 +24,11 @@ function Pill({ label, ok, title }: { label: string; ok: boolean; title?: string
 
 const NAV = [
   { to: '/', label: 'Library' },
-  { to: '/characters', label: 'Karakter' },
   { to: '/settings', label: 'Settings' },
 ]
 
 export default function SystemStatusBar() {
-  const { status, characters } = useApp()
+  const { status } = useApp()
   const location = useLocation()
 
   const rea = status?.rea_video
@@ -41,15 +40,15 @@ export default function SystemStatusBar() {
   const inLibrary = location.pathname === '/' || location.pathname.startsWith('/projects/')
 
   return (
-    <header className="sticky top-0 z-20 border-b border-ink-800 bg-ink-950/90 backdrop-blur">
+    <header className="sticky top-0 z-20 border-b border-ink-800 bg-ink-950">
       <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-3 px-5 py-3">
         <Link to="/" className="flex items-center gap-2.5">
-          <div className="grid h-8 w-8 place-items-center rounded-lg bg-indigo-600 text-sm font-bold text-white">
+          <div className="grid h-8 w-8 place-items-center rounded-lg bg-amber-500 text-xs font-bold tracking-tight text-ink-950">
             S2K
           </div>
           <div className="leading-tight">
             <div className="text-sm font-semibold text-strong">Shot2Key</div>
-            <div className="text-[11px] text-slate-500">Storyboard &amp; keyframe studio</div>
+            <div className="text-[11px] text-slate-400">Cutroom &amp; keyframe studio</div>
           </div>
         </Link>
 
@@ -63,14 +62,11 @@ export default function SystemStatusBar() {
                 className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
                   active
                     ? 'bg-ink-800 text-strong'
-                    : 'text-slate-400 hover:bg-ink-850 hover:text-slate-200'
+                    : 'text-slate-300 hover:bg-ink-850 hover:text-strong'
                 }`}
                 aria-current={active ? 'page' : undefined}
               >
                 {item.label}
-                {item.to === '/characters' && characters.length > 0 && (
-                  <span className="ml-1.5 text-[11px] text-slate-500">{characters.length}</span>
-                )}
               </Link>
             )
           })}

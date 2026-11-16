@@ -9,11 +9,20 @@ const POLL_MS = 1500
 
 function needsPolling(project: Project | null): boolean {
   if (!project) return false
+  const anySceneBusy = (project.scenes ?? []).some(
+    (scene) =>
+      scene.deep_analyzing ||
+      scene.image_status === 'queued' ||
+      scene.image_status === 'generating' ||
+      scene.last_image_status === 'queued' ||
+      scene.last_image_status === 'generating',
+  )
   return (
     project.status === 'decomposing' ||
     project.status === 'uploaded' ||
     project.analysis?.status === 'running' ||
-    project.generation?.status === 'running'
+    project.generation?.status === 'running' ||
+    anySceneBusy
   )
 }
 
@@ -144,9 +153,16 @@ export default function ProjectView() {
         setSceneEngines((current) => ({ ...current, [sceneId]: engine }))
       }
       onAnalyze={() => runAction(() => api.analyze(project.id, analyzer))}
-      onGenerateAll={() => runAction(() => api.generateAll(project.id, imageEngine))}
-      onGenerateScene={(sceneId) =>
-        runAction(() => api.generateScene(project.id, sceneId, sceneEngines[sceneId] ?? imageEngine))
+      onDeepAnalyze={(sceneId) =>
+        runAction(() => api.deepAnalyzeScene(project.id, sceneId, analyzer))
+      }
+      onGenerateAll={(target = 'first') =>
+        runAction(() => api.generateAll(project.id, imageEngine, target))
+      }
+      onGenerateScene={(sceneId, target = 'first') =>
+        runAction(() =>
+          api.generateScene(project.id, sceneId, sceneEngines[sceneId] ?? imageEngine, target),
+        )
       }
       onSavePrompt={(sceneId, patch) =>
         api.patchScene(project.id, sceneId, patch).then(setProject)

@@ -58,11 +58,18 @@ export const api = {
       body: JSON.stringify({ engine }),
     }),
 
+  deepAnalyzeScene: (id: string, sceneId: string, engine: string) =>
+    request<{ status: string }>(`/projects/${id}/scenes/${sceneId}/deep-analyze`, {
+      method: 'POST',
+      body: JSON.stringify({ engine }),
+    }),
+
   patchScene: (
     id: string,
     sceneId: string,
     patch: {
       prompt?: string
+      last_prompt?: string
       video_prompt?: string
       description?: string
       camera?: string
@@ -86,16 +93,21 @@ export const api = {
       body: JSON.stringify({ character_mappings, replace_characters }),
     }),
 
-  generateScene: (id: string, sceneId: string, engine: string) =>
+  generateScene: (
+    id: string,
+    sceneId: string,
+    engine: string,
+    target: 'first' | 'last' | 'both' = 'first',
+  ) =>
     request<{ status: string }>(`/projects/${id}/scenes/${sceneId}/generate`, {
       method: 'POST',
-      body: JSON.stringify({ engine }),
+      body: JSON.stringify({ engine, target }),
     }),
 
-  generateAll: (id: string, engine: string) =>
+  generateAll: (id: string, engine: string, target: 'first' | 'last' | 'both' = 'first') =>
     request<{ status: string; count: number }>(`/projects/${id}/generate-all`, {
       method: 'POST',
-      body: JSON.stringify({ engine }),
+      body: JSON.stringify({ engine, target }),
     }),
 
   deleteProject: (id: string) => request<null>(`/projects/${id}`, { method: 'DELETE' }),
@@ -114,6 +126,8 @@ export const api = {
   lastKeyframeUrl: (id: string, sceneId: string) =>
     `${BASE}/projects/${id}/scenes/${sceneId}/last-keyframe`,
   imageUrl: (id: string, sceneId: string) => `${BASE}/projects/${id}/scenes/${sceneId}/image`,
+  lastImageUrl: (id: string, sceneId: string) =>
+    `${BASE}/projects/${id}/scenes/${sceneId}/last-image`,
   audioStemUrl: (id: string, stem: string, download = false) =>
     `${BASE}/projects/${id}/audio/${stem}${download ? '?download=1' : ''}`,
   reportUrl: (id: string) => `${BASE}/projects/${id}/report`,

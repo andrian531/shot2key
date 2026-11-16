@@ -145,16 +145,22 @@ def _build_scenes(
                 "sheet": sheet,
                 "description": "",
                 "prompt": "",
+                "last_prompt": "",
                 "video_prompt": "",
                 "camera": "",
                 "lighting": "",
                 "detected_characters": [],
+                "deep_timeline": [],
+                "deep_analyzing": False,
                 "replace_characters": False,
                 "character_mappings": {},
                 "engine": None,
                 "image_path": None,
                 "image_status": "idle",
                 "image_error": None,
+                "last_image_path": None,
+                "last_image_status": "idle",
+                "last_image_error": None,
                 "analysis_error": None,
             }
         )
@@ -340,6 +346,7 @@ async def _run_analyze(project_id: str, engine: str, scene_ids: Iterable[str] | 
                     sid,
                     description=data["description"],
                     prompt=data["prompt"],
+                    last_prompt=data.get("last_prompt") or "",
                     video_prompt=data.get("video_prompt") or "",
                     camera=data["camera"],
                     lighting=data["lighting"],
@@ -375,23 +382,121 @@ def start_analyze(project_id: str, engine: str, scene_ids: Iterable[str] | None 
     _spawn(f"{project_id}:analyze", _run_analyze(project_id, engine, scene_ids))
 
 
+async def _run_deep_analyze(project_id: str, scene_id: str, engine: str) -> None:
+    project = store.load(project_id)
+    scene = store.find_scene(project, scene_id)
+    if scene is None:
+        return
+
+    store.mutate(
+        project_id,
+        lambda p: _patch_scene(p, scene_id, deep_analyzing=True, analysis_error=None),
+    )
+
+    video_path = Path(project.get("video_path") or "")
+    deep_dir = config.get_outputs_dir() / project_id / "deep_frames" / scene_id
+    deep_frames = await asyncio.to_thread(
+        media.extract_interval_frames,
+        video_path,
+        float(scene.get("start_time") or 0.0),
+        float(scene.get("end_time") or 0.0),
+        deep_dir,
+        0.5,
+        12,
+    )
+
+    analyzer = registry.analyzer(engine)
+    context = _context(project, scene, None)
+    if deep_frames:
+        context["deep_frames"] = deep_frames
+    images = [path for _, path in scene_input_images(scene, context)]
+    started = time.perf_counter()
+
+    try:
+        result = await analyzer.analyze(scene, context)
+    except (ProviderError, Exception) as exc:  # noqa: BLE001
+        prompt_logger.log_event(
+            project_id,
+            scene_id,
+            "deep_analyze",
+            engine,
+            prompt_sent=analyze_prompt(scene, context),
+            raw_response="",
+            input_images=images,
+            duration_ms=int((time.perf_counter() - started) * 1000),
+            status="error",
+            error=str(exc)[:2000],
+        )
+        store.mutate(
+            project_id,
+            lambda p, msg=str(exc): _patch_scene(
+                p, scene_id, deep_analyzing=False, analysis_error=msg[:500]
+            ),
+        )
+        return
+
+    payload = result.to_dict()
+    prompt_logger.log_event(
+        project_id,
+        scene_id,
+        "deep_analyze",
+        engine,
+        prompt_sent=result.prompt_sent or analyze_prompt(scene, context),
+        raw_response=result.raw,
+        input_images=images,
+        parsed=payload,
+        duration_ms=int((time.perf_counter() - started) * 1000),
+        status="ok",
+    )
+    store.mutate(
+        project_id,
+        lambda p, data=payload, eng=engine: _patch_scene(
+            p,
+            scene_id,
+            description=data["description"],
+            prompt=data["prompt"],
+            last_prompt=data.get("last_prompt") or "",
+            video_prompt=data.get("video_prompt") or "",
+            camera=data["camera"],
+            lighting=data["lighting"],
+            detected_characters=data.get("characters") or [],
+            deep_timeline=data.get("deep_timeline") or [],
+            deep_analyzing=False,
+            engine=eng,
+            analysis_error=None,
+        ),
+    )
+
+
+def start_deep_analyze(project_id: str, scene_id: str, engine: str) -> None:
+    _spawn(f"{project_id}:deep:{scene_id}", _run_deep_analyze(project_id, scene_id, engine))
+
+
 # --------------------------------------------------------------------------
 # Keyframe generation
 # --------------------------------------------------------------------------
-def scene_image_path(project_id: str, scene_id: str) -> Path:
-    return config.get_outputs_dir() / project_id / "scenes" / f"{scene_id}.png"
+def scene_image_path(project_id: str, scene_id: str, target: str = "first") -> Path:
+    suffix = "_last" if target == "last" else ""
+    return config.get_outputs_dir() / project_id / "scenes" / f"{scene_id}{suffix}.png"
 
 
-async def _generate_one(project_id: str, scene_id: str, engine: str) -> bool:
+async def _generate_single_target(
+    project_id: str, scene_id: str, engine: str, target: str
+) -> bool:
     project = store.load(project_id)
     scene = store.find_scene(project, scene_id)
     if scene is None:
         return False
 
-    out_path = scene_image_path(project_id, scene_id)
+    is_last = target == "last"
+    status_key = "last_image_status" if is_last else "image_status"
+    path_key = "last_image_path" if is_last else "image_path"
+    err_key = "last_image_error" if is_last else "image_error"
+
+    out_path = scene_image_path(project_id, scene_id, target=target)
     store.mutate(
         project_id,
-        lambda p: _patch_scene(p, scene_id, image_status="generating", image_error=None),
+        lambda p: _patch_scene(p, scene_id, **{status_key: "generating", err_key: None}),
     )
 
     generator = registry.image_generator(engine)
@@ -399,13 +504,15 @@ async def _generate_one(project_id: str, scene_id: str, engine: str) -> bool:
     started = time.perf_counter()
     async with _semaphore():
         try:
+            await generator.generate(scene, out_path, target=target)
+        except TypeError:
             await generator.generate(scene, out_path)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("generate %s gagal: %s", scene_id, exc)
+            logger.warning("generate %s (%s) gagal: %s", scene_id, target, exc)
             prompt_logger.log_event(
                 project_id,
                 scene_id,
-                "generate",
+                f"generate_{target}",
                 engine,
                 prompt_sent=getattr(generator, "last_prompt", ""),
                 raw_response="",
@@ -417,7 +524,7 @@ async def _generate_one(project_id: str, scene_id: str, engine: str) -> bool:
             store.mutate(
                 project_id,
                 lambda p, msg=str(exc): _patch_scene(
-                    p, scene_id, image_status="failed", image_error=msg[:500]
+                    p, scene_id, **{status_key: "failed", err_key: msg[:500]}
                 ),
             )
             return False
@@ -425,12 +532,12 @@ async def _generate_one(project_id: str, scene_id: str, engine: str) -> bool:
     prompt_logger.log_event(
         project_id,
         scene_id,
-        "generate",
+        f"generate_{target}",
         engine,
         prompt_sent=getattr(generator, "last_prompt", ""),
         raw_response=str(out_path),
         input_images=images,
-        parsed={"image_path": str(out_path)},
+        parsed={"image_path": str(out_path), "target": target},
         duration_ms=int((time.perf_counter() - started) * 1000),
         status="ok",
     )
@@ -439,21 +546,36 @@ async def _generate_one(project_id: str, scene_id: str, engine: str) -> bool:
         lambda p: _patch_scene(
             p,
             scene_id,
-            image_status="done",
-            image_path=str(out_path),
-            image_error=None,
-            engine=engine,
+            **{
+                status_key: "done",
+                path_key: str(out_path),
+                err_key: None,
+                "engine": engine,
+            },
         ),
     )
     return True
 
 
-async def _run_generate(project_id: str, scene_ids: list[str], engine: str) -> None:
+async def _generate_one(
+    project_id: str, scene_id: str, engine: str, target: str = "first"
+) -> bool:
+    if target == "both":
+        ok_first = await _generate_single_target(project_id, scene_id, engine, "first")
+        ok_last = await _generate_single_target(project_id, scene_id, engine, "last")
+        return ok_first and ok_last
+    return await _generate_single_target(project_id, scene_id, engine, target)
+
+
+async def _run_generate(
+    project_id: str, scene_ids: list[str], engine: str, target: str = "first"
+) -> None:
     store.mutate(
         project_id,
         lambda p: p.update(
             generation={
                 "engine": engine,
+                "target": target,
                 "status": "running",
                 "queued": len(scene_ids),
                 "done": 0,
@@ -462,13 +584,18 @@ async def _run_generate(project_id: str, scene_ids: list[str], engine: str) -> N
         ),
     )
     for scene_id in scene_ids:
+        updates: dict[str, Any] = {}
+        if target in ("first", "both"):
+            updates.update({"image_status": "queued", "image_error": None})
+        if target in ("last", "both"):
+            updates.update({"last_image_status": "queued", "last_image_error": None})
         store.mutate(
             project_id,
-            lambda p, sid=scene_id: _patch_scene(p, sid, image_status="queued", image_error=None),
+            lambda p, sid=scene_id, u=updates: _patch_scene(p, sid, **u),
         )
 
     results = await asyncio.gather(
-        *(_generate_one(project_id, scene_id, engine) for scene_id in scene_ids),
+        *(_generate_one(project_id, scene_id, engine, target=target) for scene_id in scene_ids),
         return_exceptions=True,
     )
     ok = sum(1 for result in results if result is True)
@@ -484,5 +611,7 @@ async def _run_generate(project_id: str, scene_ids: list[str], engine: str) -> N
     )
 
 
-def start_generate(project_id: str, scene_ids: list[str], engine: str) -> None:
-    _spawn(f"{project_id}:generate", _run_generate(project_id, scene_ids, engine))
+def start_generate(
+    project_id: str, scene_ids: list[str], engine: str, target: str = "first"
+) -> None:
+    _spawn(f"{project_id}:generate", _run_generate(project_id, scene_ids, engine, target=target))

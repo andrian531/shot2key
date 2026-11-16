@@ -151,6 +151,46 @@ def extract_frame(
     return out_path
 
 
+def extract_interval_frames(
+    video: str | Path,
+    start_seconds: float,
+    end_seconds: float,
+    out_dir: str | Path,
+    interval: float = 0.5,
+    max_frames: int = 12,
+    width: int = 960,
+) -> list[tuple[float, str]]:
+    """Extract evenly spaced frames across ``[start_seconds, end_seconds]``.
+
+    Returns ``[(offset_seconds, image_path), ...]`` capped at ``max_frames``.
+    """
+    start = max(0.0, float(start_seconds))
+    end = max(start, float(end_seconds))
+    duration = end - start
+    if duration <= 0.05:
+        timestamps = [start]
+    else:
+        step = max(0.2, float(interval))
+        count = int(duration / step) + 1
+        if count > max_frames:
+            step = duration / max(1, max_frames - 1)
+            count = max_frames
+        timestamps = [min(end - 0.03, start + idx * step) for idx in range(count)]
+        if end - timestamps[-1] > 0.15 and len(timestamps) < max_frames:
+            timestamps.append(max(start, end - 0.03))
+
+    out_path_dir = Path(out_dir)
+    out_path_dir.mkdir(parents=True, exist_ok=True)
+    results: list[tuple[float, str]] = []
+    for idx, ts in enumerate(timestamps, start=1):
+        offset = round(max(0.0, ts - start), 2)
+        dest = out_path_dir / f"frame_{idx:02d}_{offset:.2f}s.jpg"
+        extracted = extract_frame(video, ts, dest, width=width)
+        if extracted is not None:
+            results.append((offset, str(extracted)))
+    return results
+
+
 def python_exe() -> str:
     """The interpreter running the backend (children must match the venv)."""
     return sys.executable

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
@@ -26,10 +26,12 @@ class AnalyzeRequest(BaseModel):
 
 class GenerateRequest(BaseModel):
     engine: str = Field(default="agy")
+    target: Literal["first", "last", "both"] = "first"
 
 
 class ScenePatch(BaseModel):
     prompt: str | None = None
+    last_prompt: str | None = None
     video_prompt: str | None = None
     description: str | None = None
     camera: str | None = None
@@ -193,6 +195,24 @@ def apply_characters(project_id: str, body: ApplyCharactersRequest) -> dict[str,
     return store.mutate(project_id, apply)
 
 
+@router.post("/{project_id}/scenes/{scene_id}/deep-analyze")
+async def deep_analyze_scene(
+    project_id: str, scene_id: str, body: AnalyzeRequest
+) -> dict[str, Any]:
+    project = _load(project_id)
+    _scene_or_404(project, scene_id)
+    if body.engine not in config.ANALYZER_ENGINES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Engine tidak dikenal. Pilih: {', '.join(config.ANALYZER_ENGINES)}",
+        )
+    if jobs.is_running(f"{project_id}:deep:{scene_id}"):
+        raise HTTPException(status_code=409, detail="Deep Analyze sedang berjalan untuk scene ini.")
+
+    jobs.start_deep_analyze(project_id, scene_id, body.engine)
+    return {"status": "started", "scene_id": scene_id, "engine": body.engine}
+
+
 @router.post("/{project_id}/scenes/{scene_id}/generate")
 async def generate_scene(project_id: str, scene_id: str, body: GenerateRequest) -> dict[str, Any]:
     project = _load(project_id)
@@ -202,11 +222,18 @@ async def generate_scene(project_id: str, scene_id: str, body: GenerateRequest) 
             status_code=400,
             detail=f"Engine gambar tidak dikenal. Pilih: {', '.join(config.IMAGE_ENGINES)}",
         )
-    if not (scene.get("prompt") or "").strip():
+    has_first = bool((scene.get("prompt") or "").strip())
+    has_last = bool((scene.get("last_prompt") or scene.get("prompt") or "").strip())
+    if (body.target in ("first", "both") and not has_first) or (
+        body.target == "last" and not has_last
+    ):
         raise HTTPException(status_code=409, detail="Scene ini belum punya prompt.")
 
-    jobs.start_generate(project_id, [scene_id], body.engine)
-    return {"status": "queued", "scene_id": scene_id, "engine": body.engine}
+    if body.target == "first":
+        jobs.start_generate(project_id, [scene_id], body.engine)
+    else:
+        jobs.start_generate(project_id, [scene_id], body.engine, target=body.target)
+    return {"status": "queued", "scene_id": scene_id, "engine": body.engine, "target": body.target}
 
 
 @router.post("/{project_id}/generate-all")
@@ -227,8 +254,11 @@ async def generate_all(project_id: str, body: GenerateRequest) -> dict[str, Any]
             status_code=409, detail="Belum ada scene dengan prompt. Jalankan Analyze dulu."
         )
 
-    jobs.start_generate(project_id, scene_ids, body.engine)
-    return {"status": "queued", "count": len(scene_ids), "engine": body.engine}
+    if body.target == "first":
+        jobs.start_generate(project_id, scene_ids, body.engine)
+    else:
+        jobs.start_generate(project_id, scene_ids, body.engine, target=body.target)
+    return {"status": "queued", "count": len(scene_ids), "engine": body.engine, "target": body.target}
 
 
 @router.get("/{project_id}/scenes/{scene_id}/keyframe")
@@ -258,6 +288,16 @@ def scene_image(project_id: str, scene_id: str) -> FileResponse:
     path = Path(scene.get("image_path") or "")
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Gambar belum digenerate")
+    return FileResponse(path, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/{project_id}/scenes/{scene_id}/last-image")
+def scene_last_image(project_id: str, scene_id: str) -> FileResponse:
+    project = _load(project_id)
+    scene = _scene_or_404(project, scene_id)
+    path = Path(scene.get("last_image_path") or "")
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Gambar last keyframe belum digenerate")
     return FileResponse(path, headers={"Cache-Control": "no-store"})
 
 

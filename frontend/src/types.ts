@@ -51,6 +51,14 @@ export interface Character {
   updated_at?: string
 }
 
+export interface DeepTimelineItem {
+  time: string
+  action: string
+  expression: string
+  camera: string
+  background: string
+}
+
 export interface Scene {
   id: string
   index: number
@@ -63,16 +71,22 @@ export interface Scene {
   last_keyframe?: string | null
   description: string
   prompt: string
+  last_prompt?: string
   video_prompt?: string
   camera: string
   lighting: string
   detected_characters?: DetectedCharacter[]
+  deep_timeline?: DeepTimelineItem[]
+  deep_analyzing?: boolean
   replace_characters?: boolean
   character_mappings?: Record<string, SceneCharacterMapping>
   engine: string | null
   image_path: string | null
   image_status: 'idle' | 'queued' | 'generating' | 'done' | 'failed'
   image_error: string | null
+  last_image_path?: string | null
+  last_image_status?: 'idle' | 'queued' | 'generating' | 'done' | 'failed'
+  last_image_error?: string | null
   analysis_error: string | null
 }
 

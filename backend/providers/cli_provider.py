@@ -172,7 +172,7 @@ class CliImageGenerator:
         #: Prompt of the most recent call, read by the job runner for logging.
         self.last_prompt = ""
 
-    async def generate(self, scene: dict[str, Any], out_path: Path) -> Path:
+    async def generate(self, scene: dict[str, Any], out_path: Path, target: str = "first") -> Path:
         out_path = Path(out_path)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         cfg = settings_store.load()
@@ -183,6 +183,7 @@ class CliImageGenerator:
             out_path,
             style_prompt=style_prompt,
             character_lookup=char_lookup,
+            target=target,
         )
         self.last_prompt = prompt
         started = time.time()

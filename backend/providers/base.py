@@ -20,11 +20,14 @@ class SceneAnalysis:
     description: str = ""
     #: Dense image prompt for the still keyframe (Google Flow "First Frame").
     prompt: str = ""
-    #: Motion prompt for image-to-video (Google Flow / Veo / Kling).
+    #: Dense image prompt for the closing keyframe (Google Flow "Last Frame").
+    last_prompt: str = ""
+    #: Motion prompt for image-to-video (Omni 1.2 Flash / Veo 3.1 Lite).
     video_prompt: str = ""
     camera: str = ""
     lighting: str = ""
     characters: list[dict[str, str]] = field(default_factory=list)
+    deep_timeline: list[dict[str, str]] = field(default_factory=list)
     raw: str = ""
     #: The exact prompt handed to the engine (logged for inspection).
     prompt_sent: str = ""
@@ -34,10 +37,12 @@ class SceneAnalysis:
         return {
             "description": self.description,
             "prompt": self.prompt,
+            "last_prompt": self.last_prompt,
             "video_prompt": self.video_prompt,
             "camera": self.camera,
             "lighting": self.lighting,
             "characters": self.characters,
+            "deep_timeline": self.deep_timeline,
         }
 
 
@@ -66,15 +71,24 @@ ANALYZE_INSTRUCTIONS = """\
 Return ONLY a JSON object, no prose, no markdown fence, with exactly these keys:
 {
   "description": "2-4 sentences describing subject, setting, action, composition and colour",
-  "prompt": "a single dense IMAGE prompt (max 90 words) that recreates this frame as a still: subject, wardrobe, props, setting, framing, lens, lighting, colour grade, mood. Whenever a main person appears, refer to them using a placeholder tag like [Char_1], [Char_2].",
-  "video_prompt": "a MOTION prompt of 25-45 words for Google Flow / Veo image-to-video, animating this shot for {duration} seconds. Describe exactly ONE main action as the change from the First Frame to the Last Frame, plus ONE clear camera move (push in, pull out, pan left/right, tilt, handheld drift, or locked-off), plus a few words of mood. Do NOT repeat static details already visible in the First Frame (wall colour, wardrobe, props, lens). No cuts, no text, no music, no second action.",
+  "prompt": "a dense IMAGE prompt (max 90 words) for the First Frame: shot size, subject, wardrobe, props, setting, lens (e.g. 35mm), lighting, colour grade. Never use AI buzzwords (hyperrealistic, photorealistic, 8k, masterpiece). Refer to recurring people with [Char_1], [Char_2].",
+  "last_prompt": "a dense IMAGE prompt (max 90 words) for the Last Frame, keeping the same [Char_1], [Char_2] identity, wardrobe and setting while reflecting the final pose, expression and framing at the end of the shot. No AI buzzwords.",
+  "video_prompt": "a MOTION prompt of 25-45 words tuned for Google Flow (Omni 1.2 Flash / Veo 3.1 Lite) for a {duration}-second continuous shot. Follow this order: [Shot type], [Char_1/subject] performs ONE main action flowing from First Frame to Last Frame, [ONE clear camera move such as slow push-in, lateral tracking, pan left/right, handheld follow, or locked-off], [brief mood/light]. Audio: [short ambient or SFX cue]. Never use AI buzzwords, cuts, or stacked multi-actions.",
   "camera": "shot size + angle + lens, e.g. 'medium close-up, eye level, 50mm'",
   "lighting": "lighting setup and colour temperature in a few words",
   "characters": [
-    {"slot": "Char_1", "description": "short role/appearance of this person in the frame"}
+    {"slot": "Char_1", "description": "concise visual description of this person (age, hair, outfit)"}
   ]
 }
 Write the values in English. If no people appear, set "characters" to []. Do not invent text overlays or logos."""
+
+DEEP_ANALYZE_EXTRA = """\
+You are also given sequential frames sampled every ~0.5s across this scene.
+Also include a "deep_timeline" key in the JSON object:
+  "deep_timeline": [
+    {"time": "0.0s", "action": "body pose / movement", "expression": "facial expression or gaze", "camera": "framing / motion", "background": "key background change"}
+  ]
+Use those frame-by-frame observations to make "prompt" (First Frame), "last_prompt" (Last Frame), and "video_prompt" maximally accurate in expression, gesture, and camera path."""
 
 
 #: Scene fields that hold a reference image, in the order the model should read them.
@@ -85,8 +99,21 @@ SCENE_IMAGE_FIELDS: tuple[tuple[str, str], ...] = (
 )
 
 
-def scene_input_images(scene: dict[str, Any]) -> list[tuple[str, str]]:
-    """Existing reference images for a scene as ``[(label, path), ...]``."""
+def scene_input_images(
+    scene: dict[str, Any],
+    context: dict[str, Any] | None = None,
+) -> list[tuple[str, str]]:
+    """Reference images for a scene as ``[(label, path), ...]``."""
+    deep_frames = (context or {}).get("deep_frames") or []
+    if deep_frames:
+        found_deep: list[tuple[str, str]] = []
+        for offset, img_path in deep_frames:
+            path = Path(str(img_path))
+            if path.is_file():
+                found_deep.append((f"Frame +{float(offset):.2f}s", str(path)))
+        if found_deep:
+            return found_deep
+
     found: list[tuple[str, str]] = []
     for field_name, label in SCENE_IMAGE_FIELDS:
         value = scene.get(field_name)
@@ -116,7 +143,7 @@ def analyze_prompt(scene: dict[str, Any], context: dict[str, Any]) -> str:
             "The previous scene's prompt was: "
             f"{context['previous_prompt'][:400]}. Keep characters and wardrobe consistent."
         )
-    images = scene_input_images(scene)
+    images = scene_input_images(scene, context)
     if images:
         lines.append("")
         lines.append("Read these image files before answering:")
@@ -124,11 +151,14 @@ def analyze_prompt(scene: dict[str, Any], context: dict[str, Any]) -> str:
             lines.append(f"- {label}: {path}")
         if len(images) > 1:
             lines.append(
-                "Compare the First Frame with the Last Frame: the difference between "
-                "them is the motion the video prompt must describe."
+                "Compare the frames from start to end (the difference between them "
+                "is the motion the video prompt must describe): capture the real motion, "
+                "expression shifts, and camera path."
             )
     duration = scene.get("duration") or 0
     lines += ["", ANALYZE_INSTRUCTIONS.replace("{duration}", f"{float(duration):.2f}")]
+    if context.get("deep_frames"):
+        lines += ["", DEEP_ANALYZE_EXTRA]
     return "\n".join(lines)
 
 
@@ -145,17 +175,36 @@ Use your image generation tool, then copy or move the result to that path.
 Reply with only the absolute file path when the file exists."""
 
 
+def _naturalize_placeholders(text: str, scene: dict[str, Any]) -> str:
+    """Replace ``[Char_N]`` tags with natural descriptions from ``detected_characters``."""
+    for item in scene.get("detected_characters") or []:
+        if not isinstance(item, dict):
+            continue
+        slot = str(item.get("slot") or "").strip()
+        desc = str(item.get("description") or "").strip()
+        if not slot or not desc:
+            continue
+        text = text.replace(f"[{slot}]", desc)
+    return text
+
+
 def _apply_character_replacements(
     text: str,
     scene: dict[str, Any],
     character_lookup: dict[str, dict[str, Any]] | None,
 ) -> tuple[str, list[tuple[str, str]]]:
-    """Swap ``[Char_1]`` placeholders for the mapped character + costume.
+    """Resolve ``[Char_1]`` tags based on ``replace_characters``.
 
-    Returns ``(text, [(slot, reference_image_path), ...])``.
+    - When ``replace_characters`` is False: swap ``[Char_N]`` for natural
+      descriptions from ``detected_characters`` so raw tags never leak.
+    - When ``replace_characters`` is True: keep ``[Char_N]`` tags (or swap
+      mapped Character Cards if any exist in ``character_lookup``).
     """
     ref_images: list[tuple[str, str]] = []
-    if not (scene.get("replace_characters") and character_lookup):
+    if not scene.get("replace_characters"):
+        return _naturalize_placeholders(text, scene), ref_images
+
+    if not character_lookup:
         return text, ref_images
 
     mappings = scene.get("character_mappings") or {}
@@ -201,12 +250,21 @@ def resolve_scene_prompt(
     scene: dict[str, Any],
     style_prompt: str = "",
     character_lookup: dict[str, dict[str, Any]] | None = None,
+    target: str = "first",
 ) -> tuple[str, list[tuple[str, str]]]:
     """Resolve character/costume placeholders and append default style prompt.
 
     Returns ``(resolved_prompt, [(slot, ref_image_path), ...])``.
     """
-    prompt = (scene.get("prompt") or scene.get("description") or "").strip()
+    if target == "last":
+        prompt = (
+            scene.get("last_prompt")
+            or scene.get("prompt")
+            or scene.get("description")
+            or ""
+        ).strip()
+    else:
+        prompt = (scene.get("prompt") or scene.get("description") or "").strip()
     if not prompt:
         raise ProviderError(
             f"Scene {scene.get('id')} belum punya prompt. Jalankan Analyze dulu atau isi prompt manual."
@@ -238,13 +296,26 @@ def image_prompt(
     out_path: Path,
     style_prompt: str = "",
     character_lookup: dict[str, dict[str, Any]] | None = None,
+    target: str = "first",
 ) -> str:
-    prompt, char_refs = resolve_scene_prompt(scene, style_prompt, character_lookup)
-    reference = scene.get("keyframe")
-    head = f"Scene {scene.get('index')} ({scene.get('duration')}s)."
+    prompt, char_refs = resolve_scene_prompt(
+        scene, style_prompt, character_lookup, target=target
+    )
+    if target == "last":
+        reference = scene.get("last_keyframe") or scene.get("keyframe")
+        frame_label = "Last Frame"
+    else:
+        reference = scene.get("keyframe")
+        frame_label = "First Frame"
+
+    head = f"Scene {scene.get('index')} ({scene.get('duration')}s) [{frame_label}]."
     if reference:
         head += f" Reference frame (for composition and colour only): {reference}"
     lines = [head]
+    if target == "last" and scene.get("image_path") and Path(str(scene["image_path"])).is_file():
+        lines.append(
+            f"Generated First Keyframe (keep character, wardrobe and lighting consistent with this image): {scene['image_path']}"
+        )
     for slot, img_path in char_refs:
         lines.append(
             f"Character reference image for {slot} (match face, hair, and outfit): {img_path}"
@@ -331,12 +402,30 @@ def analysis_from_payload(payload: dict[str, Any], raw: str = "") -> SceneAnalys
                 if slot:
                     characters.append({"slot": slot, "description": desc})
 
+    raw_timeline = payload.get("deep_timeline")
+    deep_timeline: list[dict[str, str]] = []
+    if isinstance(raw_timeline, list):
+        for item in raw_timeline:
+            if not isinstance(item, dict):
+                continue
+            deep_timeline.append(
+                {
+                    "time": str(item.get("time") or "").strip(),
+                    "action": str(item.get("action") or "").strip(),
+                    "expression": str(item.get("expression") or "").strip(),
+                    "camera": str(item.get("camera") or "").strip(),
+                    "background": str(item.get("background") or "").strip(),
+                }
+            )
+
     return SceneAnalysis(
         description=description,
         prompt=prompt,
+        last_prompt=pick("last_prompt", "last_image_prompt", "end_prompt"),
         video_prompt=pick("video_prompt", "motion_prompt", "video", "motion"),
         camera=pick("camera", "camera_notes", "shot"),
         lighting=pick("lighting", "light"),
         characters=characters,
+        deep_timeline=deep_timeline,
         raw=raw,
     )

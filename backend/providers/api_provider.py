@@ -38,10 +38,10 @@ def _inline_image(path: str | Path | None) -> tuple[str, str] | None:
     return mime, data
 
 
-def _scene_images(scene: dict[str, Any]) -> list[tuple[str, str, str]]:
-    """First Frame, Last Frame and Contact Sheet as ``(label, mime, base64)``."""
+def _scene_images(scene: dict[str, Any], context: dict[str, Any] | None = None) -> list[tuple[str, str, str]]:
+    """First Frame, Last Frame, Contact Sheet, or Deep Frames as ``(label, mime, base64)``."""
     images: list[tuple[str, str, str]] = []
-    for label, path in scene_input_images(scene):
+    for label, path in scene_input_images(scene, context):
         inline = _inline_image(path)
         if inline is not None:
             mime, data = inline
@@ -62,7 +62,7 @@ class GeminiAnalyzer:
 
         prompt_text = analyze_prompt(scene, context)
         parts: list[dict[str, Any]] = [{"text": prompt_text}]
-        for label, mime, data in _scene_images(scene):
+        for label, mime, data in _scene_images(scene, context):
             parts.append({"text": f"{label}:"})
             parts.append({"inline_data": {"mime_type": mime, "data": data}})
 
@@ -107,7 +107,7 @@ class OpenAICompatibleAnalyzer:
 
         prompt_text = analyze_prompt(scene, context)
         content: list[dict[str, Any]] = [{"type": "text", "text": prompt_text}]
-        for label, mime, data in _scene_images(scene):
+        for label, mime, data in _scene_images(scene, context):
             content.append({"type": "text", "text": f"{label}:"})
             content.append(
                 {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{data}"}}

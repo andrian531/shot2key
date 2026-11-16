@@ -27,8 +27,9 @@ interface Props {
   onImageEngineChange: (engine: ImageEngine) => void
   onSceneEngineChange: (sceneId: string, engine: ImageEngine) => void
   onAnalyze: () => void
-  onGenerateAll: () => void
-  onGenerateScene: (sceneId: string) => void
+  onDeepAnalyze: (sceneId: string) => void
+  onGenerateAll: (target?: 'first' | 'last' | 'both') => void
+  onGenerateScene: (sceneId: string, target?: 'first' | 'last' | 'both') => void
   onSavePrompt: (sceneId: string, patch: ScenePromptPatch) => Promise<void>
   onUpdateSceneCharacters: (
     sceneId: string,
@@ -44,17 +45,17 @@ function AudioReportPanel({ project }: { project: Project }) {
   if (stems.length === 0 && !project.report) return null
 
   return (
-    <div className="mt-3 rounded-lg border border-ink-800 bg-ink-950/50 p-3">
+    <div className="mt-3 rounded-lg border border-ink-800 bg-ink-950/60 p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="mr-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <span className="mr-1 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
           Audio &amp; Report
         </span>
         {stems.map((stem) => (
           <div
             key={stem}
-            className="flex items-center gap-2 rounded border border-ink-800 bg-ink-900 px-2 py-1"
+            className="flex items-center gap-2 rounded border border-ink-800 bg-ink-900 px-2.5 py-1"
           >
-            <span className="text-[11px] font-medium text-slate-300">{stem}</span>
+            <span className="text-[11px] font-medium text-slate-200">{stem}</span>
             <audio
               controls
               preload="none"
@@ -63,10 +64,10 @@ function AudioReportPanel({ project }: { project: Project }) {
             />
             <a
               href={api.audioStemUrl(project.id, stem, true)}
-              className="text-[10px] text-indigo-400 hover:underline"
+              className="text-[11px] font-medium text-amber-400 hover:underline"
               title={`Download ${stem}.wav`}
             >
-              ⬇
+              wav
             </a>
           </div>
         ))}
@@ -110,22 +111,22 @@ function LogsPanel({ projectId, onClose }: { projectId: string; onClose: () => v
   }, [projectId])
 
   return (
-    <div className="mt-3 rounded-lg border border-ink-800 bg-ink-950/60">
+    <div className="mt-3 rounded-lg border border-ink-800 bg-ink-950/80">
       <div className="flex items-center justify-between border-b border-ink-800 px-3 py-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-300">
           Prompt &amp; Response Logs ({logs.length})
         </span>
-        <button className="text-[11px] text-slate-500 hover:text-slate-300" onClick={onClose}>
-          tutup ✕
+        <button className="text-[11px] text-slate-400 hover:text-slate-200" onClick={onClose}>
+          Tutup
         </button>
       </div>
 
       {loading ? (
-        <p className="p-3 text-xs text-slate-500">Memuat log...</p>
+        <p className="p-3 text-xs text-slate-400">Memuat log...</p>
       ) : error ? (
         <p className="p-3 text-xs text-rose-300">{error}</p>
       ) : logs.length === 0 ? (
-        <p className="p-3 text-xs text-slate-500">
+        <p className="p-3 text-xs text-slate-400">
           Belum ada log. Jalankan Analyze atau Generate untuk merekam prompt &amp; respons.
         </p>
       ) : (
@@ -142,11 +143,11 @@ function LogsPanel({ projectId, onClose }: { projectId: string; onClose: () => v
                 >
                   {entry.status}
                 </span>
-                <span className="font-mono text-slate-400">{entry.action}</span>
-                <span className="text-slate-300">{entry.scene_id ?? '—'}</span>
-                <span className="text-slate-500">{entry.engine}</span>
-                <span className="font-mono text-slate-500">{entry.duration_ms} ms</span>
-                <span className="ml-auto font-mono text-[10px] text-slate-600">
+                <span className="font-mono text-slate-300">{entry.action}</span>
+                <span className="text-slate-200">{entry.scene_id ?? '—'}</span>
+                <span className="text-slate-400">{entry.engine}</span>
+                <span className="font-mono text-slate-400">{entry.duration_ms} ms</span>
+                <span className="ml-auto font-mono text-[11px] text-slate-400">
                   {entry.timestamp}
                 </span>
               </summary>
@@ -159,7 +160,7 @@ function LogsPanel({ projectId, onClose }: { projectId: string; onClose: () => v
                 {entry.input_images.length > 0 && (
                   <div>
                     <div className="label mb-1">input images</div>
-                    <ul className="space-y-0.5 font-mono text-[10px] text-slate-400">
+                    <ul className="space-y-0.5 font-mono text-[11px] text-slate-300">
                       {entry.input_images.map((image) => (
                         <li key={image} className="truncate" title={image}>
                           {image}
@@ -170,13 +171,13 @@ function LogsPanel({ projectId, onClose }: { projectId: string; onClose: () => v
                 )}
                 <div>
                   <div className="label mb-1">prompt sent</div>
-                  <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-ink-900 p-2 font-mono text-[10px] text-slate-300">
+                  <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-ink-900 p-2 font-mono text-[11px] text-slate-200">
                     {entry.prompt_sent || '—'}
                   </pre>
                 </div>
                 <div>
                   <div className="label mb-1">raw response</div>
-                  <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-ink-900 p-2 font-mono text-[10px] text-slate-300">
+                  <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-ink-900 p-2 font-mono text-[11px] text-slate-200">
                     {entry.raw_response || '—'}
                   </pre>
                 </div>
@@ -193,13 +194,13 @@ function Progress({ project }: { project: Project }) {
   const percent = project.progress?.percent ?? 0
   return (
     <div className="mt-3">
-      <div className="mb-1 flex items-center justify-between text-[11px] text-slate-400">
+      <div className="mb-1 flex items-center justify-between text-[11px] text-slate-300">
         <span>{project.progress?.message || project.progress?.stage}</span>
         <span className="font-mono">{percent}%</span>
       </div>
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-ink-800">
         <div
-          className="h-full rounded-full bg-indigo-500 transition-all duration-500"
+          className="h-full rounded-full bg-amber-500 transition-all duration-500"
           style={{ width: `${Math.max(2, percent)}%` }}
         />
       </div>
@@ -221,6 +222,7 @@ export default function Storyboard({
   onImageEngineChange,
   onSceneEngineChange,
   onAnalyze,
+  onDeepAnalyze,
   onGenerateAll,
   onGenerateScene,
   onSavePrompt,
@@ -256,21 +258,21 @@ export default function Storyboard({
       <div className="card p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <button className="mb-1 text-[11px] text-slate-500 hover:text-slate-300" onClick={onBack}>
-              ← semua project
+            <button className="mb-1 text-xs text-slate-400 hover:text-slate-200" onClick={onBack}>
+              ← Semua project
             </button>
             <h1 className="truncate text-lg font-semibold text-strong">{project.filename}</h1>
-            <p className="mt-0.5 text-[12px] text-slate-500">
+            <p className="mt-0.5 text-xs text-slate-400">
               {formatTime(project.source?.duration)} · {project.source?.width}×
               {project.source?.height} · {project.source?.fps} fps ·{' '}
               {formatBytes(project.size_bytes)} · {project.shots.length} shot →{' '}
-              <span className="text-slate-300">{scenes.length} scene</span>
+              <span className="font-medium text-slate-200">{scenes.length} scene</span>
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1.5">
-              <span className="text-[11px] text-slate-500">Analyzer</span>
+              <span className="text-xs text-slate-400">Analyzer</span>
               <select
                 className="input w-auto py-1.5 text-xs"
                 value={analyzer}
@@ -293,7 +295,7 @@ export default function Storyboard({
             </div>
 
             <div className="flex items-center gap-1.5">
-              <span className="text-[11px] text-slate-500">Image</span>
+              <span className="text-xs text-slate-400">Image</span>
               <select
                 className="input w-auto py-1.5 text-xs"
                 value={imageEngine}
@@ -305,9 +307,9 @@ export default function Storyboard({
               <button
                 className="btn-primary py-1.5 text-xs"
                 disabled={!ready || generating || withPrompt === 0}
-                onClick={onGenerateAll}
+                onClick={() => onGenerateAll('first')}
               >
-                {generating ? 'Generating...' : `Generate All (${withPrompt})`}
+                {generating ? 'Generating...' : `Generate First All (${withPrompt})`}
               </button>
             </div>
 
@@ -320,7 +322,7 @@ export default function Storyboard({
             </button>
 
             <button className="btn-ghost py-1.5 text-xs" disabled={!scenes.length} onClick={onExport}>
-              ⬇ Export ZIP
+              Export ZIP
             </button>
           </div>
         </div>
@@ -335,9 +337,9 @@ export default function Storyboard({
 
         {analyzing && (
           <div className="mt-3">
-            <div className="mb-1 flex items-center justify-between text-[11px] text-indigo-300">
+            <div className="mb-1 flex items-center justify-between text-[11px] text-amber-300">
               <span>
-                ⏳ Menganalisis &amp; membuat prompt otomatis ({project.analysis?.done ?? 0}/
+                Menganalisis &amp; membuat prompt otomatis ({project.analysis?.done ?? 0}/
                 {project.analysis?.total ?? scenes.length} scene) dengan{' '}
                 {project.analysis?.engine ?? analyzer}...
               </span>
@@ -352,7 +354,7 @@ export default function Storyboard({
             </div>
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-ink-800">
               <div
-                className="h-full animate-pulse rounded-full bg-indigo-500 transition-all duration-500"
+                className="h-full animate-pulse rounded-full bg-amber-500 transition-all duration-500"
                 style={{
                   width: `${Math.max(
                     8,
@@ -372,7 +374,7 @@ export default function Storyboard({
           <div className="mt-3">
             <div className="mb-1 flex items-center justify-between text-[11px] text-emerald-300">
               <span>
-                🎨 Menggenerate keyframe ({project.generation?.done ?? 0}/
+                Menggenerate keyframe ({project.generation?.done ?? 0}/
                 {project.generation?.queued ?? scenes.length}) dengan{' '}
                 {project.generation?.engine ?? imageEngine}...
               </span>
@@ -416,15 +418,15 @@ export default function Storyboard({
         )}
 
         {ready && (
-          <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-400">
             <span>
-              prompt: <span className="text-slate-300">{withPrompt}</span>/{scenes.length}
+              prompt: <span className="text-slate-200">{withPrompt}</span>/{scenes.length}
             </span>
             <span>
-              keyframe: <span className="text-slate-300">{withImage}</span>/{scenes.length}
+              keyframe: <span className="text-slate-200">{withImage}</span>/{scenes.length}
             </span>
             {project.analysis?.status === 'running' && (
-              <span className="text-indigo-300">
+              <span className="text-amber-300">
                 analyze {project.analysis.done ?? 0}/{project.analysis.total ?? scenes.length}
               </span>
             )}
@@ -432,7 +434,7 @@ export default function Storyboard({
               <span className="text-amber-300">sebagian scene gagal dianalisis</span>
             )}
             {project.generation?.status === 'running' && (
-              <span className="text-indigo-300">
+              <span className="text-emerald-300">
                 generate {project.generation.done}/{project.generation.queued}
               </span>
             )}
@@ -450,7 +452,7 @@ export default function Storyboard({
         <div className="mt-5 flex flex-col gap-5 lg:flex-row lg:items-start">
           {/* Sidebar: Timeline list of scenes by time */}
           <aside className="card w-full shrink-0 overflow-hidden lg:sticky lg:top-16 lg:w-80">
-            <div className="border-b border-ink-800 px-3.5 py-2.5 text-xs font-semibold text-slate-300">
+            <div className="border-b border-ink-800 px-3.5 py-2.5 text-xs font-semibold text-slate-200">
               Timeline Scene ({scenes.length})
             </div>
             <div className="max-h-[72vh] divide-y divide-ink-800/70 overflow-y-auto">
@@ -458,6 +460,7 @@ export default function Storyboard({
                 const selected = scene.id === activeScene.id
                 const hasPrompt = Boolean(scene.prompt.trim())
                 const hasKeyframe = scene.image_status === 'done'
+                const hasLastKeyframe = scene.last_image_status === 'done'
                 return (
                   <button
                     key={scene.id}
@@ -465,8 +468,8 @@ export default function Storyboard({
                     onClick={() => setSelectedId(scene.id)}
                     className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition ${
                       selected
-                        ? 'bg-indigo-950/50 ring-1 ring-inset ring-indigo-500/40'
-                        : 'hover:bg-ink-900/70'
+                        ? 'bg-amber-950/30 ring-1 ring-inset ring-amber-500/40'
+                        : 'hover:bg-ink-850'
                     }`}
                   >
                     <img
@@ -483,33 +486,44 @@ export default function Storyboard({
                       <div className="flex items-center justify-between gap-1">
                         <span
                           className={`text-xs font-semibold ${
-                            selected ? 'text-indigo-200' : 'text-slate-200'
+                            selected ? 'text-amber-200' : 'text-slate-200'
                           }`}
                         >
                           Scene {String(scene.index).padStart(2, '0')}
                         </span>
-                        <span className="font-mono text-[10px] text-slate-500">
+                        <span className="font-mono text-[11px] text-slate-400">
                           {scene.duration.toFixed(1)}s
                         </span>
                       </div>
-                      <div className="mt-0.5 font-mono text-[10px] text-slate-400">
+                      <div className="mt-0.5 font-mono text-[11px] text-slate-300">
                         {formatTime(scene.start_time)} → {formatTime(scene.end_time)}
                       </div>
-                      <div className="mt-1 flex items-center gap-1.5 text-[10px]">
+                      <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
                         <span
                           className={`rounded px-1.5 py-0.5 ${
                             hasPrompt
                               ? 'bg-emerald-950/60 text-emerald-300'
-                              : analyzing
-                                ? 'bg-indigo-950/60 text-indigo-300'
-                                : 'bg-ink-800 text-slate-500'
+                              : analyzing || scene.deep_analyzing
+                                ? 'bg-amber-950/60 text-amber-300'
+                                : 'bg-ink-800 text-slate-400'
                           }`}
                         >
-                          {hasPrompt ? 'prompt ✓' : analyzing ? 'antre...' : 'kosong'}
+                          {scene.deep_analyzing
+                            ? 'deep...'
+                            : hasPrompt
+                              ? 'prompt ✓'
+                              : analyzing
+                                ? 'antre...'
+                                : 'kosong'}
                         </span>
                         {hasKeyframe && (
                           <span className="rounded bg-emerald-950/60 px-1.5 py-0.5 text-emerald-300">
-                            keyframe ✓
+                            first ✓
+                          </span>
+                        )}
+                        {hasLastKeyframe && (
+                          <span className="rounded bg-emerald-950/60 px-1.5 py-0.5 text-emerald-300">
+                            last ✓
                           </span>
                         )}
                       </div>
@@ -522,9 +536,9 @@ export default function Storyboard({
 
           {/* Main Workspace: Selected Scene Detail */}
           <div className="min-w-0 flex-1 space-y-3">
-            <div className="flex items-center justify-between text-xs text-slate-400">
+            <div className="flex items-center justify-between text-xs text-slate-300">
               <span>
-                Menampilkan <strong className="text-slate-200">Scene {String(activeScene.index).padStart(2, '0')}</strong>{' '}
+                Menampilkan <strong className="text-strong">Scene {String(activeScene.index).padStart(2, '0')}</strong>{' '}
                 dari {scenes.length}
               </span>
               <div className="flex items-center gap-2">
@@ -558,10 +572,12 @@ export default function Storyboard({
               onSavePrompt={onSavePrompt}
               onUpdateSceneCharacters={onUpdateSceneCharacters}
               onApplyCharactersAll={onApplyCharactersAll}
+              onDeepAnalyze={onDeepAnalyze}
               onGenerate={onGenerateScene}
-              keyframeUrl={`/api/projects/${project.id}/scenes/${activeScene.id}/keyframe`}
-              lastKeyframeUrl={`/api/projects/${project.id}/scenes/${activeScene.id}/last-keyframe`}
-              imageUrl={`/api/projects/${project.id}/scenes/${activeScene.id}/image`}
+              keyframeUrl={api.keyframeUrl(project.id, activeScene.id)}
+              lastKeyframeUrl={api.lastKeyframeUrl(project.id, activeScene.id)}
+              imageUrl={api.imageUrl(project.id, activeScene.id)}
+              lastImageUrl={api.lastImageUrl(project.id, activeScene.id)}
             />
           </div>
         </div>

@@ -55,13 +55,19 @@ def build_video_md(project: dict[str, Any]) -> str:
             )
             lines.append("")
         lines += [
-            "**Image Prompt (keyframe / First Frame)**",
+            "**First Image Prompt (Google Flow First Frame)**",
             "",
             "```text",
             (scene.get("prompt") or "").strip(),
             "```",
             "",
-            "**Video Motion Prompt (Google Flow / Veo)**",
+            "**Last Image Prompt (Google Flow Last Frame)**",
+            "",
+            "```text",
+            (scene.get("last_prompt") or "").strip(),
+            "```",
+            "",
+            "**Video Motion Prompt (Omni 1.2 Flash / Veo 3.1 Lite)**",
             "",
             "```text",
             (scene.get("video_prompt") or "").strip(),
@@ -69,7 +75,9 @@ def build_video_md(project: dict[str, Any]) -> str:
             "",
         ]
         if scene.get("image_path"):
-            lines += [f"Keyframe: `keyframes/{scene.get('id')}.png`", ""]
+            lines += [f"First keyframe: `keyframes/{scene.get('id')}.png`", ""]
+        if scene.get("last_image_path"):
+            lines += [f"Last keyframe: `keyframes/{scene.get('id')}_last.png`", ""]
         if scene.get("keyframe"):
             lines += [f"First frame: `reference/{scene.get('id')}.jpg`", ""]
         if scene.get("last_keyframe"):
@@ -103,12 +111,17 @@ def build_prompts_json(project: dict[str, Any]) -> str:
                 # explicit name used by the Phase 2 UI and docs.
                 "prompt": scene.get("prompt"),
                 "image_prompt": scene.get("prompt"),
+                "last_prompt": scene.get("last_prompt"),
                 "video_prompt": scene.get("video_prompt"),
+                "deep_timeline": scene.get("deep_timeline") or [],
                 "camera": scene.get("camera"),
                 "lighting": scene.get("lighting"),
                 "engine": scene.get("engine"),
                 "keyframe": f"keyframes/{scene.get('id')}.png"
                 if scene.get("image_path")
+                else None,
+                "last_keyframe": f"keyframes/{scene.get('id')}_last.png"
+                if scene.get("last_image_path")
                 else None,
                 "first_frame": f"reference/{scene.get('id')}.jpg"
                 if scene.get("keyframe")
@@ -148,6 +161,9 @@ def build_zip(project: dict[str, Any]) -> bytes:
             image_path = scene.get("image_path")
             if image_path and Path(image_path).is_file():
                 archive.write(image_path, f"keyframes/{scene.get('id')}.png")
+            last_image_path = scene.get("last_image_path")
+            if last_image_path and Path(last_image_path).is_file():
+                archive.write(last_image_path, f"keyframes/{scene.get('id')}_last.png")
             reference = scene.get("keyframe")
             if reference and Path(reference).is_file():
                 suffix = Path(reference).suffix or ".jpg"

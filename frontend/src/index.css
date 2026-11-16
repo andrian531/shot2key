@@ -13,9 +13,9 @@
   --slate-100: 241 245 249;
   --slate-200: 226 232 240;
   --slate-300: 203 213 225;
-  --slate-400: 148 163 184;
-  --slate-500: 100 116 139;
-  --slate-600: 71 85 105;
+  --slate-400: 158 172 192;
+  --slate-500: 140 156 178;
+  --slate-600: 112 128 152;
 
   --text-strong: 255 255 255;
 }
@@ -47,17 +47,17 @@
 
 @layer components {
   .card {
-    @apply rounded-xl border border-ink-700 bg-ink-900 shadow-lg shadow-black/30;
+    @apply rounded-xl border border-ink-700/80 bg-ink-900;
   }
 
   .label {
-    @apply mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-400;
+    @apply mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-300;
   }
 
   .input {
     @apply w-full rounded-lg border border-ink-700 bg-ink-850 px-3 py-2 text-sm text-slate-100
-      placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1
-      focus:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-60;
+      placeholder:text-slate-500 focus:border-amber-500 focus:outline-none focus:ring-1
+      focus:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-60;
   }
 
   .btn {
@@ -67,11 +67,11 @@
   }
 
   .btn-primary {
-    @apply btn bg-indigo-600 text-white hover:bg-indigo-500 focus:ring-indigo-500;
+    @apply btn bg-amber-500 font-semibold text-ink-950 hover:bg-amber-400 focus:ring-amber-400;
   }
 
   .btn-ghost {
-    @apply btn border border-ink-700 bg-ink-850 text-slate-300 hover:bg-ink-800 focus:ring-ink-600;
+    @apply btn border border-ink-700 bg-ink-850 text-slate-200 hover:bg-ink-800 focus:ring-ink-600;
   }
 
   .btn-danger {

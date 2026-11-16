@@ -23,8 +23,8 @@ export default {
         strong: 'rgb(var(--text-strong) / <alpha-value>)',
       },
       fontFamily: {
-        sans: ['Inter', 'Segoe UI', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Consolas', 'monospace'],
+        sans: ['"Plus Jakarta Sans"', 'Segoe UI', 'system-ui', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'Cascadia Mono', 'Consolas', 'monospace'],
       },
     },
   },
