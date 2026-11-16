@@ -148,8 +148,8 @@ export default function ProjectView() {
       onGenerateScene={(sceneId) =>
         runAction(() => api.generateScene(project.id, sceneId, sceneEngines[sceneId] ?? imageEngine))
       }
-      onSavePrompt={(sceneId, prompt) =>
-        api.patchScene(project.id, sceneId, { prompt }).then(setProject)
+      onSavePrompt={(sceneId, patch) =>
+        api.patchScene(project.id, sceneId, patch).then(setProject)
       }
       onUpdateSceneCharacters={(sceneId, replaceCharacters, mappings) =>
         api

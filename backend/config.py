@@ -70,6 +70,8 @@ DEFAULT_SETTINGS: dict[str, object] = {
     "rea_video_vlm": False,
     "auto_analyze": True,
     "default_style_prompt": "cinematic film still, 35mm lens, natural lighting, detailed textures, 16:9, no text, no watermark",
+    #: Cap for one scene. Shots are never merged; a longer shot is split.
+    "max_scene_seconds": 10.0,
 }
 
 

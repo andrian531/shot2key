@@ -25,6 +25,7 @@ class SettingsUpdate(BaseModel):
     rea_video_vlm: bool | None = None
     auto_analyze: bool | None = None
     default_style_prompt: str | None = None
+    max_scene_seconds: float | None = None
 
 
 @router.get("")
@@ -45,5 +46,15 @@ def put_settings(body: SettingsUpdate) -> dict[str, Any]:
         values.pop("default_analyzer")
     if "default_image_engine" in values and values["default_image_engine"] not in config.IMAGE_ENGINES:
         values.pop("default_image_engine")
+    if "max_scene_seconds" in values:
+        try:
+            seconds = float(values["max_scene_seconds"])
+        except (TypeError, ValueError):
+            values.pop("max_scene_seconds")
+        else:
+            if not 1.0 <= seconds <= 60.0:
+                values.pop("max_scene_seconds")
+            else:
+                values["max_scene_seconds"] = seconds
     settings_store.save(values)
     return {"settings": settings_store.masked()}

@@ -1,7 +1,8 @@
 # Shot2Key
 
-Local GUI studio that turns a reference video into a **scene-by-scene storyboard** (each scene ≤ 10 s),
-writes a ready-to-use image prompt per scene, and generates the **keyframe image** with a local AI CLI
+Local GUI studio that turns a reference video into a **scene-by-scene storyboard** (one scene per shot,
+each ≤ 10 s), writes an **image prompt** and a **video motion prompt** per scene, and generates the
+**keyframe image** with a local AI CLI
 (`agy` / `codex`) or an API provider (Gemini / any [OI]-compatible endpoint).
 
 Video decomposition is powered by [`JuneYaooo/rea-video`](https://github.com/JuneYaooo/rea-video)
@@ -45,10 +46,12 @@ http://localhost:5173.
 1. **Upload** `.mp4/.mov/.mkv` → stored in `backend/uploads/`.
 2. **Decompose** runs `rea-video decompose` in a background job; progress is polled through
    `GET /api/projects/{id}`.
-3. **Smart scene splitter** groups shots into scenes of at most **10 s** (a 30 s video yields ≥ 3
-   scenes). A single shot longer than 10 s is cut into equal pieces, and a fresh reference frame is
-   extracted at the piece's own start time.
-4. **Analyze** sends each scene's reference frame to the chosen engine and stores description, prompt,
+3. **Scene splitter** keeps **one scene per shot** — shots are never merged, so a 3 s shot stays a
+   3 s scene. Only a shot longer than `max_scene_seconds` (default 10, configurable 5/8/10 in
+   Settings) is cut into equal pieces, and fresh first/last frames are extracted at the piece's own
+   edges.
+4. **Analyze** sends each scene's reference frame to the chosen engine and stores description,
+   `prompt` (image / First Frame) and `video_prompt` (motion for Google Flow / Veo),
    camera and lighting notes.
 5. **Generate** calls `agy` or `codex` per scene (or *Generate All*) with a prompt that names the exact
    output path; results land in `backend/outputs/{project_id}/scenes/`.
@@ -64,7 +67,10 @@ http://localhost:5173.
 | GET | `/api/projects` | list projects |
 | GET | `/api/projects/{id}` | project + shots + scenes + progress |
 | POST | `/api/projects/{id}/analyze` | `{engine: agy\|codex\|gemini\|openai}` |
-| PATCH | `/api/projects/{id}/scenes/{scene_id}` | edit prompt / description |
+| PATCH | `/api/projects/{id}/scenes/{scene_id}` | edit `prompt` / `video_prompt` / description |
+| GET | `/api/projects/{id}/scenes/{scene_id}/last-keyframe` | last frame (First+Last mode) |
+| GET | `/api/projects/{id}/audio/{stem}` | `original` / `vocals` / `music` / `effects` |
+| GET | `/api/projects/{id}/report` | rea-video `report.html` |
 | POST | `/api/projects/{id}/scenes/{scene_id}/generate` | `{engine: agy\|codex}` |
 | POST | `/api/projects/{id}/generate-all` | queue every scene that has a prompt |
 | GET | `/api/projects/{id}/export` | ZIP bundle |
@@ -99,8 +105,8 @@ cd backend
 .venv\Scripts\python.exe -m pytest
 ```
 
-Covers the ≤ 10 s guarantee (grouping, splitting, contiguity, edge durations) and the HTTP
-surface (status, upload validation, scene editing, export).
+Covers the per-shot rule (no merging, splitting, contiguity, edge durations), the dual prompts,
+last-frame/audio/report endpoints and the export bundle.
 
 ## Attribution & license
 

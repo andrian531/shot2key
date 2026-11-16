@@ -62,6 +62,7 @@ export const api = {
     sceneId: string,
     patch: {
       prompt?: string
+      video_prompt?: string
       description?: string
       camera?: string
       lighting?: string
@@ -109,7 +110,12 @@ export const api = {
 
   exportUrl: (id: string) => `${BASE}/projects/${id}/export`,
   keyframeUrl: (id: string, sceneId: string) => `${BASE}/projects/${id}/scenes/${sceneId}/keyframe`,
+  lastKeyframeUrl: (id: string, sceneId: string) =>
+    `${BASE}/projects/${id}/scenes/${sceneId}/last-keyframe`,
   imageUrl: (id: string, sceneId: string) => `${BASE}/projects/${id}/scenes/${sceneId}/image`,
+  audioStemUrl: (id: string, stem: string, download = false) =>
+    `${BASE}/projects/${id}/audio/${stem}${download ? '?download=1' : ''}`,
+  reportUrl: (id: string) => `${BASE}/projects/${id}/report`,
 
   listCharacters: () =>
     request<{ characters: Character[] }>('/characters').then((data) => data.characters),

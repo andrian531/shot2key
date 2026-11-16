@@ -3,6 +3,11 @@ import { Link } from 'react-router-dom'
 import type { Character, ImageEngine, Scene, SceneCharacterMapping } from '../types'
 import { formatTime } from '../lib/format'
 
+export interface ScenePromptPatch {
+  prompt?: string
+  video_prompt?: string
+}
+
 interface Props {
   projectId: string
   scene: Scene
@@ -10,7 +15,7 @@ interface Props {
   analyzing?: boolean
   engine: ImageEngine
   onEngineChange: (engine: ImageEngine) => void
-  onSavePrompt: (sceneId: string, prompt: string) => Promise<void>
+  onSavePrompt: (sceneId: string, patch: ScenePromptPatch) => Promise<void>
   onUpdateSceneCharacters: (
     sceneId: string,
     replaceCharacters: boolean,
@@ -19,6 +24,7 @@ interface Props {
   onApplyCharactersAll: (mappings: Record<string, SceneCharacterMapping>) => Promise<void>
   onGenerate: (sceneId: string) => void
   keyframeUrl: string
+  lastKeyframeUrl: string
   imageUrl: string
 }
 
@@ -38,11 +44,44 @@ const STATUS_LABEL: Record<Scene['image_status'], string> = {
   failed: 'gagal',
 }
 
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false)
+
+  async function copy() {
+    if (!text.trim()) return
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      // Clipboard API needs a secure context; fall back to a hidden textarea.
+      const area = document.createElement('textarea')
+      area.value = text
+      document.body.appendChild(area)
+      area.select()
+      document.execCommand('copy')
+      document.body.removeChild(area)
+    }
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1500)
+  }
+
+  return (
+    <button
+      type="button"
+      className="rounded border border-ink-700 bg-ink-850 px-2 py-0.5 text-[10px] font-medium text-slate-300 hover:bg-ink-800 disabled:opacity-40"
+      disabled={!text.trim()}
+      onClick={copy}
+      title={`Copy ${label}`}
+    >
+      {copied ? '✓ Copied' : 'Copy'}
+    </button>
+  )
+}
+
 export default function SceneCard({
   projectId,
   scene,
   characters,
-  analyzing,
+  analyzing = false,
   engine,
   onEngineChange,
   onSavePrompt,
@@ -50,22 +89,25 @@ export default function SceneCard({
   onApplyCharactersAll,
   onGenerate,
   keyframeUrl,
+  lastKeyframeUrl,
   imageUrl,
 }: Props) {
   const [prompt, setPrompt] = useState(scene.prompt)
+  const [videoPrompt, setVideoPrompt] = useState(scene.video_prompt ?? '')
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
 
   useEffect(() => {
     setPrompt(scene.prompt)
+    setVideoPrompt(scene.video_prompt ?? '')
     setDirty(false)
-  }, [scene.prompt])
+  }, [scene.prompt, scene.video_prompt])
 
   async function commit() {
     if (!dirty) return
     setSaving(true)
     try {
-      await onSavePrompt(scene.id, prompt)
+      await onSavePrompt(scene.id, { prompt, video_prompt: videoPrompt })
       setDirty(false)
     } finally {
       setSaving(false)
@@ -74,6 +116,7 @@ export default function SceneCard({
 
   const busy = scene.image_status === 'queued' || scene.image_status === 'generating'
   const hasImage = scene.image_status === 'done'
+  const hasLast = Boolean(scene.last_keyframe)
   const replaceEnabled = Boolean(scene.replace_characters)
   const mappings = scene.character_mappings ?? {}
   const detected = scene.detected_characters ?? []
@@ -118,18 +161,33 @@ export default function SceneCard({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-px bg-ink-800">
+      <div className={`grid gap-px bg-ink-800 ${hasLast ? 'grid-cols-3' : 'grid-cols-2'}`}>
         <figure className="relative bg-ink-950">
           <img
             src={keyframeUrl}
-            alt={`Referensi scene ${scene.index}`}
+            alt={`Referensi first frame scene ${scene.index}`}
             className="aspect-video w-full object-cover"
             loading="lazy"
           />
           <figcaption className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-slate-300">
-            referensi
+            referensi (first)
           </figcaption>
         </figure>
+
+        {hasLast && (
+          <figure className="relative bg-ink-950">
+            <img
+              src={lastKeyframeUrl}
+              alt={`Referensi last frame scene ${scene.index}`}
+              className="aspect-video w-full object-cover"
+              loading="lazy"
+            />
+            <figcaption className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-slate-300">
+              referensi (last)
+            </figcaption>
+          </figure>
+        )}
+
         <figure className="relative bg-ink-950">
           {hasImage ? (
             <img
@@ -140,7 +198,7 @@ export default function SceneCard({
             />
           ) : (
             <div className="grid aspect-video w-full place-items-center text-[11px] text-slate-600">
-              {busy ? 'menggenerate...' : 'belum ada keyframe'}
+              {busy ? 'menggenerate...' : analyzing ? 'menunggu analyze...' : 'belum ada keyframe'}
             </div>
           )}
           <figcaption className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-slate-300">
@@ -161,24 +219,31 @@ export default function SceneCard({
           </p>
         )}
 
-        <div className="flex items-center justify-between">
-          <label className="label mb-0 mt-1">Prompt</label>
-          {analyzing && !scene.prompt.trim() && (
-            <span className="animate-pulse text-[11px] text-indigo-300">
-              ⏳ Menunggu analyze...
-            </span>
-          )}
+        <div className="mt-1 flex items-center justify-between gap-2">
+          <label className="label mb-0">Image Prompt (keyframe / first frame)</label>
+          <CopyButton text={prompt} label="image prompt" />
         </div>
         <textarea
-          className="input min-h-[104px] resize-y font-mono text-[12px] leading-relaxed"
+          className="input min-h-[92px] resize-y font-mono text-[12px] leading-relaxed"
           value={prompt}
-          placeholder={
-            analyzing
-              ? 'Sedang menunggu giliran analisis AI...'
-              : 'Belum ada prompt — jalankan Analyze atau tulis manual.'
-          }
+          placeholder="Belum ada prompt — jalankan Analyze atau tulis manual."
           onChange={(event) => {
             setPrompt(event.target.value)
+            setDirty(true)
+          }}
+          onBlur={commit}
+        />
+
+        <div className="mt-1 flex items-center justify-between gap-2">
+          <label className="label mb-0">Video Motion Prompt (Google Flow)</label>
+          <CopyButton text={videoPrompt} label="video prompt" />
+        </div>
+        <textarea
+          className="input min-h-[76px] resize-y font-mono text-[12px] leading-relaxed"
+          value={videoPrompt}
+          placeholder="Gerakan subjek & kamera untuk image-to-video — jalankan Analyze untuk mengisinya."
+          onChange={(event) => {
+            setVideoPrompt(event.target.value)
             setDirty(true)
           }}
           onBlur={commit}

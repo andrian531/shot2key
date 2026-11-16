@@ -170,13 +170,43 @@ def decompose(
     return json.loads(breakdown_path.read_text(encoding="utf-8"))
 
 
-def shot_keyframe(breakdown_dir: str | Path, shot: dict[str, Any]) -> Path | None:
-    """Absolute path of the reference frame rea-video wrote for a shot."""
+def _asset(breakdown_dir: str | Path, shot: dict[str, Any], *keys: str) -> Path | None:
     assets = shot.get("assets") or {}
-    relative = assets.get("first_frame") or assets.get("sheet")
-    if not relative:
-        return None
-    path = Path(breakdown_dir) / relative
+    for key in keys:
+        relative = assets.get(key)
+        if not relative:
+            continue
+        path = Path(breakdown_dir) / relative
+        if path.is_file():
+            return path
+    return None
+
+
+def shot_keyframe(breakdown_dir: str | Path, shot: dict[str, Any]) -> Path | None:
+    """Absolute path of the first reference frame rea-video wrote for a shot."""
+    return _asset(breakdown_dir, shot, "first_frame", "sheet")
+
+
+def shot_last_keyframe(breakdown_dir: str | Path, shot: dict[str, Any]) -> Path | None:
+    """Absolute path of the shot's last frame (Google Flow First+Last mode)."""
+    return _asset(breakdown_dir, shot, "last_frame")
+
+
+def audio_stems(breakdown_dir: str | Path) -> list[str]:
+    """Which separated audio stems rea-video produced (original/vocals/music/effects)."""
+    stems_dir = Path(breakdown_dir) / "stems"
+    if not stems_dir.is_dir():
+        return []
+    found: list[str] = []
+    for name in ("original", "vocals", "music", "effects"):
+        if (stems_dir / f"{name}.wav").is_file():
+            found.append(name)
+    return found
+
+
+def report_path(breakdown_dir: str | Path) -> Path | None:
+    """rea-video's HTML report, if it was written."""
+    path = Path(breakdown_dir) / "report.html"
     return path if path.is_file() else None
 
 

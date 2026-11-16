@@ -69,6 +69,8 @@ def create(filename: str, video_path: str, size_bytes: int = 0) -> dict[str, Any
         "generation": {"engine": None, "status": "idle", "queued": 0, "done": 0, "failed": 0},
         "breakdown_dir": None,
         "subtitles": {},
+        "audio_stems": [],
+        "report": None,
     }
     with _LOCK:
         _write(project)

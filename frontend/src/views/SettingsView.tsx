@@ -41,6 +41,7 @@ export default function SettingsView() {
         rea_video_vlm: settings.rea_video_vlm,
         auto_analyze: settings.auto_analyze,
         default_style_prompt: settings.default_style_prompt,
+        max_scene_seconds: settings.max_scene_seconds,
       })
       setSettings(saved)
       await refreshStatus()
@@ -151,6 +152,21 @@ export default function SettingsView() {
             </div>
 
             <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">Max durasi scene (detik)</label>
+                <select
+                  className="input"
+                  value={String(settings.max_scene_seconds ?? 10)}
+                  onChange={(event) => update('max_scene_seconds', Number(event.target.value))}
+                >
+                  <option value="5">5 detik</option>
+                  <option value="8">8 detik</option>
+                  <option value="10">10 detik</option>
+                </select>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Shot tidak pernah digabung; shot lebih panjang dari ini akan dipecah.
+                </p>
+              </div>
               <div>
                 <label className="label">Bahasa laporan rea-video</label>
                 <select

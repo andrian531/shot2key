@@ -18,7 +18,10 @@ class SceneAnalysis:
     """What an analyzer returns for one scene."""
 
     description: str = ""
+    #: Dense image prompt for the still keyframe (Google Flow "First Frame").
     prompt: str = ""
+    #: Motion prompt for image-to-video (Google Flow / Veo / Kling).
+    video_prompt: str = ""
     camera: str = ""
     lighting: str = ""
     characters: list[dict[str, str]] = field(default_factory=list)
@@ -29,6 +32,7 @@ class SceneAnalysis:
         return {
             "description": self.description,
             "prompt": self.prompt,
+            "video_prompt": self.video_prompt,
             "camera": self.camera,
             "lighting": self.lighting,
             "characters": self.characters,
@@ -60,7 +64,8 @@ ANALYZE_INSTRUCTIONS = """\
 Return ONLY a JSON object, no prose, no markdown fence, with exactly these keys:
 {
   "description": "2-4 sentences describing subject, setting, action, composition and colour",
-  "prompt": "a single dense image-generation prompt (max 90 words) that would recreate this frame: subject, wardrobe, props, setting, framing, lens, lighting, colour grade, mood. Whenever a main person appears, refer to them using a placeholder tag like [Char_1], [Char_2] in the prompt.",
+  "prompt": "a single dense IMAGE prompt (max 90 words) that recreates this frame as a still: subject, wardrobe, props, setting, framing, lens, lighting, colour grade, mood. Whenever a main person appears, refer to them using a placeholder tag like [Char_1], [Char_2].",
+  "video_prompt": "a MOTION prompt (max 70 words) for an image-to-video model (Google Flow / Veo / Kling) that animates this still for {duration} seconds: what the subject does, how the camera moves (push in, pan, handheld, static), and how the shot ends. Describe movement only - do not repeat the static wardrobe/setting description, and do not mention cuts, text or music.",
   "camera": "shot size + angle + lens, e.g. 'medium close-up, eye level, 50mm'",
   "lighting": "lighting setup and colour temperature in a few words",
   "characters": [
@@ -92,7 +97,8 @@ def analyze_prompt(scene: dict[str, Any], context: dict[str, Any]) -> str:
     if keyframe:
         lines.append(f"Reference frame file: {keyframe}")
         lines.append("Read that image file before answering.")
-    lines += ["", ANALYZE_INSTRUCTIONS]
+    duration = scene.get("duration") or 0
+    lines += ["", ANALYZE_INSTRUCTIONS.replace("{duration}", f"{float(duration):.2f}")]
     return "\n".join(lines)
 
 
@@ -107,6 +113,58 @@ Save the image as a PNG file at exactly this path:
 
 Use your image generation tool, then copy or move the result to that path.
 Reply with only the absolute file path when the file exists."""
+
+
+def _apply_character_replacements(
+    text: str,
+    scene: dict[str, Any],
+    character_lookup: dict[str, dict[str, Any]] | None,
+) -> tuple[str, list[tuple[str, str]]]:
+    """Swap ``[Char_1]`` placeholders for the mapped character + costume.
+
+    Returns ``(text, [(slot, reference_image_path), ...])``.
+    """
+    ref_images: list[tuple[str, str]] = []
+    if not (scene.get("replace_characters") and character_lookup):
+        return text, ref_images
+
+    mappings = scene.get("character_mappings") or {}
+    extra_notes: list[str] = []
+    for slot, mapping in mappings.items():
+        if not isinstance(mapping, dict):
+            continue
+        char_id = mapping.get("character_id")
+        if not char_id or char_id not in character_lookup:
+            continue
+        char = character_lookup[char_id]
+        costume_desc = ""
+        costume_id = mapping.get("costume_id")
+        for cos in char.get("costumes") or []:
+            if cos.get("id") == costume_id:
+                costume_desc = str(cos.get("description") or cos.get("name") or "").strip()
+                break
+
+        parts = [str(char.get("name") or slot)]
+        if char.get("appearance"):
+            parts.append(str(char["appearance"]))
+        if costume_desc:
+            parts.append(f"wearing {costume_desc}")
+        replacement = ", ".join(parts)
+
+        tag = f"[{slot}]"
+        if tag in text:
+            text = text.replace(tag, replacement)
+        else:
+            extra_notes.append(f"Replace {slot} with: {replacement}.")
+
+        ref_img = char.get("reference_image")
+        if ref_img and Path(str(ref_img)).is_file():
+            ref_images.append((slot, str(ref_img)))
+
+    if extra_notes:
+        text = f"{' '.join(extra_notes)} {text}"
+
+    return text, ref_images
 
 
 def resolve_scene_prompt(
@@ -124,49 +182,25 @@ def resolve_scene_prompt(
             f"Scene {scene.get('id')} belum punya prompt. Jalankan Analyze dulu atau isi prompt manual."
         )
 
-    ref_images: list[tuple[str, str]] = []
-    if scene.get("replace_characters") and character_lookup:
-        mappings = scene.get("character_mappings") or {}
-        extra_notes: list[str] = []
-        for slot, mapping in mappings.items():
-            if not isinstance(mapping, dict):
-                continue
-            char_id = mapping.get("character_id")
-            if not char_id or char_id not in character_lookup:
-                continue
-            char = character_lookup[char_id]
-            costume_desc = ""
-            costume_id = mapping.get("costume_id")
-            for cos in char.get("costumes") or []:
-                if cos.get("id") == costume_id:
-                    costume_desc = str(cos.get("description") or cos.get("name") or "").strip()
-                    break
-
-            parts = [str(char.get("name") or slot)]
-            if char.get("appearance"):
-                parts.append(str(char["appearance"]))
-            if costume_desc:
-                parts.append(f"wearing {costume_desc}")
-            replacement = ", ".join(parts)
-
-            tag = f"[{slot}]"
-            if tag in prompt:
-                prompt = prompt.replace(tag, replacement)
-            else:
-                extra_notes.append(f"Replace {slot} with: {replacement}.")
-
-            ref_img = char.get("reference_image")
-            if ref_img and Path(str(ref_img)).is_file():
-                ref_images.append((slot, str(ref_img)))
-
-        if extra_notes:
-            prompt = f"{' '.join(extra_notes)} {prompt}"
+    prompt, ref_images = _apply_character_replacements(prompt, scene, character_lookup)
 
     clean_style = style_prompt.strip()
     if clean_style and clean_style.lower() not in prompt.lower():
         prompt = f"{prompt.rstrip('. ')}. Style: {clean_style}"
 
     return prompt, ref_images
+
+
+def resolve_video_prompt(
+    scene: dict[str, Any],
+    character_lookup: dict[str, dict[str, Any]] | None = None,
+) -> str:
+    """Resolve ``[Char_N]`` placeholders in the motion prompt (no style suffix)."""
+    text = (scene.get("video_prompt") or "").strip()
+    if not text:
+        return ""
+    text, _ = _apply_character_replacements(text, scene, character_lookup)
+    return text
 
 
 def image_prompt(
@@ -270,6 +304,7 @@ def analysis_from_payload(payload: dict[str, Any], raw: str = "") -> SceneAnalys
     return SceneAnalysis(
         description=description,
         prompt=prompt,
+        video_prompt=pick("video_prompt", "motion_prompt", "video", "motion"),
         camera=pick("camera", "camera_notes", "shot"),
         lighting=pick("lighting", "light"),
         characters=characters,

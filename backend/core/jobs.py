@@ -73,11 +73,13 @@ def _build_scenes(
     breakdown_dir: Path,
     breakdown: dict[str, Any],
     video_path: Path,
+    max_seconds: float | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Turn a breakdown into shots + scenes, extracting split-scene frames."""
     shots: list[dict[str, Any]] = []
     for shot in breakdown.get("shots") or []:
         keyframe = decomposer.shot_keyframe(breakdown_dir, shot)
+        last_keyframe = decomposer.shot_last_keyframe(breakdown_dir, shot)
         shots.append(
             {
                 "index": shot.get("index"),
@@ -85,11 +87,14 @@ def _build_scenes(
                 "end": shot.get("end"),
                 "duration": shot.get("duration"),
                 "keyframe": str(keyframe) if keyframe else None,
+                "last_keyframe": str(last_keyframe) if last_keyframe else None,
                 "sheet": (shot.get("assets") or {}).get("sheet"),
             }
         )
 
-    scenes: list[Scene] = split_scenes(shots, max_seconds=config.MAX_SCENE_SECONDS)
+    scenes: list[Scene] = split_scenes(
+        shots, max_seconds=max_seconds or config.MAX_SCENE_SECONDS
+    )
     scene_dir = config.get_outputs_dir() / project_id / "scenes"
     scene_dir.mkdir(parents=True, exist_ok=True)
 
@@ -99,11 +104,13 @@ def _build_scenes(
         scene_id = _scene_id(scene.index)
         shot = by_index.get(scene.keyframe_shot_index) or {}
         keyframe = shot.get("keyframe")
+        last_keyframe = shot.get("last_keyframe")
 
-        # A split piece starts mid-shot: the shot's first frame is the wrong
-        # reference, so cut a fresh one at the scene's own start time.
+        # A split piece starts/ends mid-shot: the shot's own first/last frames
+        # are the wrong reference, so cut fresh ones at the scene's edges.
         if scene.is_split and shot:
             shot_start = float(shot.get("start") or 0.0)
+            shot_end = float(shot.get("end") or 0.0)
             if scene.start_time - shot_start > 0.05:
                 extracted = media.extract_frame(
                     video_path,
@@ -112,6 +119,14 @@ def _build_scenes(
                 )
                 if extracted is not None:
                     keyframe = str(extracted)
+            if shot_end - scene.end_time > 0.05:
+                extracted_last = media.extract_frame(
+                    video_path,
+                    max(scene.start_time, scene.end_time - 0.05),
+                    scene_dir / f"{scene_id}_last_ref.jpg",
+                )
+                if extracted_last is not None:
+                    last_keyframe = str(extracted_last)
 
         payload.append(
             {
@@ -123,8 +138,10 @@ def _build_scenes(
                 "shot_indices": scene.shot_indices,
                 "is_split": scene.is_split,
                 "keyframe": keyframe,
+                "last_keyframe": last_keyframe,
                 "description": "",
                 "prompt": "",
+                "video_prompt": "",
                 "camera": "",
                 "lighting": "",
                 "detected_characters": [],
@@ -173,9 +190,12 @@ async def _run_decompose(project_id: str) -> None:
         )
         return
 
-    store.set_progress(project_id, "splitting", 97, "Mengelompokkan scene (<= 10 detik)...")
+    max_seconds = float(values.get("max_scene_seconds") or config.MAX_SCENE_SECONDS)
+    store.set_progress(
+        project_id, "splitting", 97, f"Membuat scene per shot (maks {max_seconds:g} detik)..."
+    )
     shots, scenes = await asyncio.to_thread(
-        _build_scenes, project_id, breakdown_dir, breakdown, video_path
+        _build_scenes, project_id, breakdown_dir, breakdown, video_path, max_seconds
     )
 
     source = breakdown.get("source") or {}
@@ -198,6 +218,10 @@ async def _run_decompose(project_id: str) -> None:
             },
             breakdown_dir=str(breakdown_dir),
             subtitles=subtitles,
+            audio_stems=decomposer.audio_stems(breakdown_dir),
+            report=(
+                str(report) if (report := decomposer.report_path(breakdown_dir)) else None
+            ),
             progress={
                 "stage": "ready",
                 "percent": 100,
@@ -285,6 +309,7 @@ async def _run_analyze(project_id: str, engine: str, scene_ids: Iterable[str] | 
                     sid,
                     description=data["description"],
                     prompt=data["prompt"],
+                    video_prompt=data.get("video_prompt") or "",
                     camera=data["camera"],
                     lighting=data["lighting"],
                     detected_characters=data.get("characters") or [],

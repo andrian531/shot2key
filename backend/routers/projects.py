@@ -30,6 +30,7 @@ class GenerateRequest(BaseModel):
 
 class ScenePatch(BaseModel):
     prompt: str | None = None
+    video_prompt: str | None = None
     description: str | None = None
     camera: str | None = None
     lighting: str | None = None
@@ -239,6 +240,16 @@ def scene_keyframe(project_id: str, scene_id: str) -> FileResponse:
     return FileResponse(path)
 
 
+@router.get("/{project_id}/scenes/{scene_id}/last-keyframe")
+def scene_last_keyframe(project_id: str, scene_id: str) -> FileResponse:
+    project = _load(project_id)
+    scene = _scene_or_404(project, scene_id)
+    path = Path(scene.get("last_keyframe") or "")
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Last frame referensi tidak tersedia")
+    return FileResponse(path)
+
+
 @router.get("/{project_id}/scenes/{scene_id}/image")
 def scene_image(project_id: str, scene_id: str) -> FileResponse:
     project = _load(project_id)
@@ -247,6 +258,38 @@ def scene_image(project_id: str, scene_id: str) -> FileResponse:
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Gambar belum digenerate")
     return FileResponse(path, headers={"Cache-Control": "no-store"})
+
+
+AUDIO_STEMS = ("original", "vocals", "music", "effects")
+
+
+@router.get("/{project_id}/audio/{stem}")
+def project_audio(project_id: str, stem: str, download: bool = False) -> FileResponse:
+    """Serve one separated audio stem produced by rea-video."""
+    project = _load(project_id)
+    if stem not in AUDIO_STEMS:
+        raise HTTPException(
+            status_code=400, detail=f"Stem tidak dikenal. Pilih: {', '.join(AUDIO_STEMS)}"
+        )
+    breakdown_dir = Path(project.get("breakdown_dir") or "")
+    path = breakdown_dir / "stems" / f"{stem}.wav"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"Stem {stem} tidak tersedia")
+    headers = {"Cache-Control": "no-store"}
+    if download:
+        headers["Content-Disposition"] = f'attachment; filename="{stem}.wav"'
+    return FileResponse(path, media_type="audio/wav", headers=headers)
+
+
+@router.get("/{project_id}/report")
+def project_report(project_id: str) -> FileResponse:
+    """Open rea-video's HTML report in a new tab."""
+    project = _load(project_id)
+    breakdown_dir = Path(project.get("breakdown_dir") or "")
+    path = breakdown_dir / "report.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="report.html tidak tersedia")
+    return FileResponse(path, media_type="text/html")
 
 
 @router.get("/{project_id}/export")

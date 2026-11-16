@@ -7,8 +7,10 @@ import type {
   SceneCharacterMapping,
   SystemStatus,
 } from '../types'
+import { api } from '../api/client'
 import { formatBytes, formatTime } from '../lib/format'
 import SceneCard from './SceneCard'
+import type { ScenePromptPatch } from './SceneCard'
 
 interface Props {
   project: Project
@@ -26,7 +28,7 @@ interface Props {
   onAnalyze: () => void
   onGenerateAll: () => void
   onGenerateScene: (sceneId: string) => void
-  onSavePrompt: (sceneId: string, prompt: string) => Promise<void>
+  onSavePrompt: (sceneId: string, patch: ScenePromptPatch) => Promise<void>
   onUpdateSceneCharacters: (
     sceneId: string,
     replaceCharacters: boolean,
@@ -34,6 +36,52 @@ interface Props {
   ) => Promise<void>
   onApplyCharactersAll: (mappings: Record<string, SceneCharacterMapping>) => Promise<void>
   onExport: () => void
+}
+
+function AudioReportPanel({ project }: { project: Project }) {
+  const stems = project.audio_stems ?? []
+  if (stems.length === 0 && !project.report) return null
+
+  return (
+    <div className="mt-3 rounded-lg border border-ink-800 bg-ink-950/50 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          Audio &amp; Report
+        </span>
+        {stems.map((stem) => (
+          <div
+            key={stem}
+            className="flex items-center gap-2 rounded border border-ink-800 bg-ink-900 px-2 py-1"
+          >
+            <span className="text-[11px] font-medium text-slate-300">{stem}</span>
+            <audio
+              controls
+              preload="none"
+              src={api.audioStemUrl(project.id, stem)}
+              className="h-7 w-40"
+            />
+            <a
+              href={api.audioStemUrl(project.id, stem, true)}
+              className="text-[10px] text-indigo-400 hover:underline"
+              title={`Download ${stem}.wav`}
+            >
+              ⬇
+            </a>
+          </div>
+        ))}
+        {project.report && (
+          <a
+            href={api.reportUrl(project.id)}
+            target="_blank"
+            rel="noreferrer"
+            className="btn-ghost py-1 text-[11px]"
+          >
+            Buka report.html
+          </a>
+        )}
+      </div>
+    </div>
+  )
 }
 
 function Progress({ project }: { project: Project }) {
@@ -164,6 +212,8 @@ export default function Storyboard({
         </div>
 
         {project.status === 'decomposing' && <Progress project={project} />}
+
+        {ready && <AudioReportPanel project={project} />}
 
         {analyzing && (
           <div className="mt-3">
@@ -392,6 +442,7 @@ export default function Storyboard({
               onApplyCharactersAll={onApplyCharactersAll}
               onGenerate={onGenerateScene}
               keyframeUrl={`/api/projects/${project.id}/scenes/${activeScene.id}/keyframe`}
+              lastKeyframeUrl={`/api/projects/${project.id}/scenes/${activeScene.id}/last-keyframe`}
               imageUrl={`/api/projects/${project.id}/scenes/${activeScene.id}/image`}
             />
           </div>

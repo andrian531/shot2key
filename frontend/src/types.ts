@@ -60,8 +60,10 @@ export interface Scene {
   shot_indices: number[]
   is_split: boolean
   keyframe: string | null
+  last_keyframe?: string | null
   description: string
   prompt: string
+  video_prompt?: string
   camera: string
   lighting: string
   detected_characters?: DetectedCharacter[]
@@ -90,6 +92,8 @@ export interface Project {
   analysis: { engine: string | null; status: string; error: string | null; done?: number; total?: number }
   generation: { engine: string | null; status: string; queued: number; done: number; failed: number }
   subtitles: Record<string, string>
+  audio_stems?: string[]
+  report?: string | null
 }
 
 export interface ProjectSummary {
@@ -117,4 +121,5 @@ export interface Settings {
   rea_video_vlm: boolean
   auto_analyze: boolean
   default_style_prompt: string
+  max_scene_seconds: number
 }
