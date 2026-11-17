@@ -350,7 +350,6 @@ async def _run_analyze(project_id: str, engine: str, scene_ids: Iterable[str] | 
                     description=data["description"],
                     prompt=data["prompt"],
                     last_prompt=data.get("last_prompt") or "",
-                    video_prompt=data.get("video_prompt") or "",
                     camera=data["camera"],
                     lighting=data["lighting"],
                     detected_characters=data.get("characters") or [],
@@ -393,7 +392,13 @@ async def _run_deep_analyze(project_id: str, scene_id: str, engine: str) -> None
 
     store.mutate(
         project_id,
-        lambda p: _patch_scene(p, scene_id, deep_analyzing=True, analysis_error=None),
+        lambda p: _patch_scene(
+            p,
+            scene_id,
+            deep_analyzing=True,
+            deep_progress={"percent": 20, "message": "Mengekstrak frame tiap 0.5 detik (ffmpeg)..."},
+            analysis_error=None,
+        ),
     )
 
     video_path = Path(project.get("video_path") or "")
@@ -413,6 +418,17 @@ async def _run_deep_analyze(project_id: str, scene_id: str, engine: str) -> None
     if deep_frames:
         context["deep_frames"] = deep_frames
     images = [path for _, path in scene_input_images(scene, context)]
+    store.mutate(
+        project_id,
+        lambda p, cnt=len(images): _patch_scene(
+            p,
+            scene_id,
+            deep_progress={
+                "percent": 65,
+                "message": f"Menganalisis {cnt} frame (ekspresi, aksi, kamera) dengan {engine}...",
+            },
+        ),
+    )
     started = time.perf_counter()
 
     try:
@@ -433,7 +449,11 @@ async def _run_deep_analyze(project_id: str, scene_id: str, engine: str) -> None
         store.mutate(
             project_id,
             lambda p, msg=str(exc): _patch_scene(
-                p, scene_id, deep_analyzing=False, analysis_error=msg[:500]
+                p,
+                scene_id,
+                deep_analyzing=False,
+                deep_progress=None,
+                analysis_error=msg[:500],
             ),
         )
         return
@@ -459,12 +479,12 @@ async def _run_deep_analyze(project_id: str, scene_id: str, engine: str) -> None
             description=data["description"],
             prompt=data["prompt"],
             last_prompt=data.get("last_prompt") or "",
-            video_prompt=data.get("video_prompt") or "",
             camera=data["camera"],
             lighting=data["lighting"],
             detected_characters=data.get("characters") or [],
             deep_timeline=data.get("deep_timeline") or [],
             deep_analyzing=False,
+            deep_progress=None,
             engine=eng,
             analysis_error=None,
         ),

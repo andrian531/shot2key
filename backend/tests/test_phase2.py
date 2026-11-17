@@ -45,7 +45,7 @@ def test_analysis_payload_without_video_prompt_is_empty():
 def test_analyze_prompt_mentions_motion_and_duration():
     text = analyze_prompt(
         {"index": 2, "start_time": 3.0, "end_time": 6.5, "duration": 3.5},
-        {"video_name": "clip.mp4"},
+        {"video_name": "clip.mp4", "video_prompt_only": True, "video_model": "omni_1_2"},
     )
     assert "video_prompt" in text
     assert "3.50" in text

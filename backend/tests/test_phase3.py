@@ -133,11 +133,14 @@ def test_analyze_prompt_without_images_has_no_image_block():
 
 
 def test_video_prompt_instructions_are_flow_specific():
-    text = analyze_prompt({"index": 1, "duration": 3.0}, {})
+    text = analyze_prompt(
+        {"index": 1, "duration": 3.0},
+        {"video_prompt_only": True, "video_model": "veo_3_1_lite"},
+    )
     assert "25-45 words" in text
-    assert "Google Flow" in text
+    assert "Veo 3.1" in text
     assert "ONE main action" in text
-    assert "ONE clear camera move" in text
+    assert "ONE camera move" in text
 
 
 # --------------------------------------------------------------------------

@@ -75,7 +75,6 @@ Return ONLY a JSON object, no prose, no markdown fence, with exactly these keys:
   "description": "2-4 sentences describing subject, setting, action, composition and colour",
   "prompt": "a dense IMAGE prompt (max 90 words) for the First Frame: shot size, subject, wardrobe, props, setting, lens (e.g. 35mm), lighting, colour grade. Never use AI buzzwords (hyperrealistic, photorealistic, 8k, masterpiece). Refer to recurring people with [Char_1], [Char_2].",
   "last_prompt": "a dense IMAGE prompt (max 90 words) for the Last Frame, keeping the same [Char_1], [Char_2] identity, wardrobe and setting while reflecting the final pose, expression and framing at the end of the shot. No AI buzzwords.",
-  "video_prompt": "a MOTION prompt of 25-45 words tuned for Google Flow (Omni 1.2 Flash / Veo 3.1 Lite) for a {duration}-second continuous shot. Follow this order: [Shot type], [Char_1/subject] performs ONE main action flowing from First Frame to Last Frame, [ONE clear camera move such as slow push-in, lateral tracking, pan left/right, handheld follow, or locked-off], [brief mood/light]. Audio: [short ambient or SFX cue]. Never use AI buzzwords, cuts, or stacked multi-actions.",
   "camera": "shot size + angle + lens, e.g. 'medium close-up, eye level, 50mm'",
   "lighting": "lighting setup and colour temperature in a few words",
   "characters": [
@@ -90,7 +89,7 @@ Also include a "deep_timeline" key in the JSON object:
   "deep_timeline": [
     {"time": "0.0s", "action": "body pose / movement", "expression": "facial expression or gaze", "camera": "framing / motion", "background": "key background change"}
   ]
-Use those frame-by-frame observations to make "prompt" (First Frame), "last_prompt" (Last Frame), and "video_prompt" maximally accurate in expression, gesture, and camera path."""
+Use those frame-by-frame observations to make "description", "prompt" (First Frame), and "last_prompt" (Last Frame) maximally accurate in expression, gesture, and camera path."""
 
 
 #: Scene fields that hold a reference image, in the order the model should read them.

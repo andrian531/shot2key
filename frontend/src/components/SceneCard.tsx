@@ -195,14 +195,6 @@ export default function SceneCard({
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            className={`btn-ghost py-1 text-xs ${clipOpen ? 'border-amber-500/60 text-amber-300' : ''}`}
-            onClick={() => setClipOpen((open) => !open)}
-            title="Potong dan putar klip video asli scene ini secara on-demand"
-          >
-            {clipOpen ? 'Tutup Clip' : 'Play Clip'}
-          </button>
-          <button
-            type="button"
             className="btn-ghost py-1 text-xs"
             disabled={deepBusy || analyzing}
             onClick={() => onDeepAnalyze(scene.id)}
@@ -221,29 +213,94 @@ export default function SceneCard({
         </div>
       </div>
 
-      {/* Lazy On-Demand Scene Video Player (cut only when user clicks Play Clip) */}
-      {clipOpen && (
-        <div className="border-b border-ink-800 bg-ink-950 p-3">
-          <div className="mb-2 flex items-center justify-between text-xs text-slate-300">
+      {/* Deep Analyze progress bar */}
+      {deepBusy && (
+        <div className="border-b border-ink-800 bg-ink-950/90 px-4 py-2.5">
+          <div className="mb-1 flex items-center justify-between text-xs text-amber-300">
             <span>
-              Klip asli Scene {String(scene.index).padStart(2, '0')} ({formatTime(scene.start_time)} →{' '}
-              {formatTime(scene.end_time)})
+              {scene.deep_progress?.message ||
+                'Deep Analyze berjalan (ekstrak frame 0.5s & analisis detail)...'}
             </span>
-            <a href={clipDownloadUrl} className="font-medium text-amber-400 hover:underline">
-              Download MP4
-            </a>
+            <span className="font-mono">{scene.deep_progress?.percent ?? 40}%</span>
           </div>
-          <video
-            key={clipUrl}
-            controls
-            autoPlay
-            loop
-            playsInline
-            src={clipUrl}
-            className="max-h-72 w-full rounded-lg bg-black"
-          />
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-ink-800">
+            <div
+              className="h-full animate-pulse rounded-full bg-amber-500 transition-all duration-500"
+              style={{ width: `${Math.max(15, scene.deep_progress?.percent ?? 40)}%` }}
+            />
+          </div>
         </div>
       )}
+
+      {/* Video Player Referensi Scene: tampil sebagai player, baru memotong & memuat klip saat Play diklik */}
+      <div className="border-b border-ink-800 bg-ink-950 p-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <div className="relative aspect-video w-full shrink-0 overflow-hidden rounded-lg border border-ink-800 bg-black md:w-72">
+            {clipOpen ? (
+              <video
+                key={clipUrl}
+                controls
+                autoPlay
+                loop
+                playsInline
+                src={clipUrl}
+                className="h-full w-full object-contain"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setClipOpen(true)}
+                className="group relative block h-full w-full text-left"
+                title="Klik untuk memotong & memutar klip video asli scene ini"
+              >
+                <img
+                  src={keyframeUrl}
+                  alt={`Poster klip scene ${scene.index}`}
+                  className="h-full w-full object-cover opacity-80 transition-opacity group-hover:opacity-100"
+                />
+                <span className="absolute inset-0 grid place-items-center bg-black/30">
+                  <span className="grid h-11 w-11 place-items-center rounded-full bg-amber-500 text-ink-950 transition-transform group-hover:scale-105">
+                    <svg viewBox="0 0 24 24" fill="currentColor" className="ml-0.5 h-5 w-5" aria-hidden="true">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  </span>
+                </span>
+                <span className="absolute bottom-1.5 right-1.5 rounded bg-black/80 px-1.5 py-0.5 font-mono text-[10px] text-slate-200">
+                  {scene.duration.toFixed(2)}s
+                </span>
+              </button>
+            )}
+          </div>
+
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="text-xs font-semibold text-strong">
+              Video Referensi Scene {String(scene.index).padStart(2, '0')}
+            </div>
+            <p className="text-xs text-slate-300">
+              {clipOpen
+                ? 'Klip sedang diputar (loop). Jika baru pertama kali dibuka, ffmpeg memotong segmen ini otomatis.'
+                : 'Klik tombol Play pada player untuk memotong dan memutar klip asli scene ini tanpa memuat video penuh.'}
+            </p>
+            <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">
+              <span className="font-mono text-slate-400">
+                {formatTime(scene.start_time)} → {formatTime(scene.end_time)}
+              </span>
+              <a href={clipDownloadUrl} className="font-medium text-amber-400 hover:underline">
+                Download MP4
+              </a>
+              {clipOpen && (
+                <button
+                  type="button"
+                  onClick={() => setClipOpen(false)}
+                  className="text-slate-400 hover:text-slate-200"
+                >
+                  Tutup player
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Visual Strip: Referensi (First & Last) + Keyframe Hasil Generate (First & Last) */}
       <div className="grid grid-cols-2 gap-px bg-ink-800 xl:grid-cols-4">
@@ -286,8 +343,12 @@ export default function SceneCard({
               loading="lazy"
             />
           ) : (
-            <div className="grid aspect-video w-full place-items-center text-xs text-slate-400">
-              {busyFirst ? 'menggenerate first...' : analyzing || deepBusy ? 'menganalisis...' : 'belum ada keyframe'}
+            <div className="grid aspect-video w-full place-items-center px-3 text-center text-[11px] leading-snug text-slate-400">
+              {busyFirst
+                ? 'menggenerate first keyframe...'
+                : analyzing || deepBusy
+                  ? 'menganalisis...'
+                  : 'Opsional: hasil gambar baru jika ingin ubah adegan/karakter'}
             </div>
           )}
           <figcaption className="absolute bottom-1.5 left-1.5 rounded bg-black/80 px-2 py-0.5 text-[11px] font-medium text-amber-300">
@@ -304,8 +365,10 @@ export default function SceneCard({
               loading="lazy"
             />
           ) : (
-            <div className="grid aspect-video w-full place-items-center text-xs text-slate-400">
-              {busyLast ? 'menggenerate last...' : 'belum ada last keyframe'}
+            <div className="grid aspect-video w-full place-items-center px-3 text-center text-[11px] leading-snug text-slate-400">
+              {busyLast
+                ? 'menggenerate last keyframe...'
+                : 'Opsional: hasil gambar akhir baru jika ingin ubah adegan/karakter'}
             </div>
           )}
           <figcaption className="absolute bottom-1.5 left-1.5 rounded bg-black/80 px-2 py-0.5 text-[11px] font-medium text-amber-300">
@@ -394,61 +457,128 @@ export default function SceneCard({
           )}
         </div>
 
-        {/* 3 Prompt Columns */}
-        <div className="grid gap-4 xl:grid-cols-3">
-          {/* 1. First Keyframe Prompt */}
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between gap-2">
-              <label className="label mb-0">1. First Keyframe Prompt</label>
-              <CopyButton text={displayFirstPrompt} label="first keyframe prompt" />
+        {/* Row 1: Image Prompts (2 Columns: First + Last Keyframe) */}
+        <section className="space-y-3 rounded-lg border border-ink-800 bg-ink-950/50 p-3.5">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-ink-800/80 pb-2.5">
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-strong">
+                Image Prompts (First &amp; Last Keyframe)
+              </h3>
+              <p className="mt-0.5 text-xs text-slate-400">
+                Opsional: generate gambar keyframe baru langsung di sini (agy / codex), atau copy
+                prompt-nya untuk di-generate di penyedia lain seperti ChatGPT / Midjourney / Nano Banana.
+              </p>
             </div>
-            <textarea
-              className="input min-h-[120px] flex-1 resize-y font-mono text-xs leading-relaxed"
-              value={replaceEnabled ? prompt : displayFirstPrompt}
-              placeholder={
-                analyzing || deepBusy
-                  ? 'Sedang menganalisis...'
-                  : 'Prompt untuk gambar First Frame...'
-              }
-              onChange={(event) => {
-                setPrompt(event.target.value)
-                setDirty(true)
-              }}
-              onBlur={commit}
-            />
-          </div>
-
-          {/* 2. Last Keyframe Prompt */}
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between gap-2">
-              <label className="label mb-0">2. Last Keyframe Prompt</label>
-              <CopyButton text={displayLastPrompt} label="last keyframe prompt" />
-            </div>
-            <textarea
-              className="input min-h-[120px] flex-1 resize-y font-mono text-xs leading-relaxed"
-              value={replaceEnabled ? lastPrompt : displayLastPrompt}
-              placeholder={
-                analyzing || deepBusy
-                  ? 'Sedang menganalisis...'
-                  : 'Prompt untuk gambar Last Frame...'
-              }
-              onChange={(event) => {
-                setLastPrompt(event.target.value)
-                setDirty(true)
-              }}
-              onBlur={commit}
-            />
-          </div>
-
-          {/* 3. Video Prompt (Model-specific generator) */}
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between gap-2">
-              <label className="label mb-0 text-amber-300">3. Video Prompt</label>
-              <CopyButton text={displayVideoPrompt} label="video prompt" />
-            </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
               <select
-                className="input min-w-0 flex-1 py-1 text-xs"
+                className="input w-auto py-1 text-xs"
+                value={engine}
+                onChange={(event) => onEngineChange(event.target.value as ImageEngine)}
+                title="Image Engine untuk generate langsung di sini"
+              >
+                <option value="agy">agy</option>
+                <option value="codex">codex</option>
+              </select>
+              <button
+                type="button"
+                className="btn-primary py-1 text-xs"
+                disabled={!prompt.trim() || busyAny || saving}
+                onClick={() => onGenerate(scene.id, 'both')}
+              >
+                {busyAny ? 'Generating...' : 'Generate Both (First + Last)'}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* 1. First Keyframe Prompt */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <label className="label mb-0">1. First Keyframe Prompt</label>
+                <CopyButton text={displayFirstPrompt} label="first keyframe prompt" />
+              </div>
+              <textarea
+                className="input min-h-[120px] flex-1 resize-y font-mono text-xs leading-relaxed"
+                value={replaceEnabled ? prompt : displayFirstPrompt}
+                placeholder={
+                  analyzing || deepBusy
+                    ? 'Sedang menganalisis...'
+                    : 'Prompt untuk gambar First Frame...'
+                }
+                onChange={(event) => {
+                  setPrompt(event.target.value)
+                  setDirty(true)
+                }}
+                onBlur={commit}
+              />
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  className="btn-ghost py-1.5 text-xs"
+                  disabled={!prompt.trim() || busyAny || saving}
+                  onClick={() => onGenerate(scene.id, 'first')}
+                >
+                  {busyFirst
+                    ? 'Generating First...'
+                    : hasFirstGen
+                      ? 'Regenerate First'
+                      : 'Generate First'}
+                </button>
+              </div>
+            </div>
+
+            {/* 2. Last Keyframe Prompt */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <label className="label mb-0">2. Last Keyframe Prompt</label>
+                <CopyButton text={displayLastPrompt} label="last keyframe prompt" />
+              </div>
+              <textarea
+                className="input min-h-[120px] flex-1 resize-y font-mono text-xs leading-relaxed"
+                value={replaceEnabled ? lastPrompt : displayLastPrompt}
+                placeholder={
+                  analyzing || deepBusy
+                    ? 'Sedang menganalisis...'
+                    : 'Prompt untuk gambar Last Frame...'
+                }
+                onChange={(event) => {
+                  setLastPrompt(event.target.value)
+                  setDirty(true)
+                }}
+                onBlur={commit}
+              />
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  className="btn-ghost py-1.5 text-xs"
+                  disabled={!(lastPrompt.trim() || prompt.trim()) || busyAny || saving}
+                  onClick={() => onGenerate(scene.id, 'last')}
+                >
+                  {busyLast
+                    ? 'Generating Last...'
+                    : hasLastGen
+                      ? 'Regenerate Last'
+                      : 'Generate Last'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Row 2: Video Prompt (Separate full-width row) */}
+        <section className="space-y-2.5 rounded-lg border border-ink-800 bg-ink-950/50 p-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-amber-300">
+                Video Motion Prompt (Untuk Generator Video AI)
+              </h3>
+              <p className="mt-0.5 text-xs text-slate-400">
+                Copy prompt ini ke Google Flow (Omni 1.2 / Veo 3.1 Lite), Seedance, MiniMax, atau Kling bersama First/Last Frame.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                className="input w-auto py-1 text-xs"
                 value={videoModel}
                 onChange={(event) => setVideoModel(event.target.value)}
                 title="Target generator video AI"
@@ -461,26 +591,40 @@ export default function SceneCard({
               </select>
               <button
                 type="button"
-                className="btn-ghost shrink-0 py-1 text-xs"
+                className="btn-ghost py-1 text-xs"
                 disabled={videoPromptBusy || analyzing || deepBusy}
                 onClick={() => onGenerateVideoPrompt(scene.id, videoModel)}
                 title="Susun ulang video prompt dari data scene sesuai aturan model terpilih"
               >
                 {videoPromptBusy ? 'Generating...' : 'Generate Prompt'}
               </button>
+              <CopyButton text={displayVideoPrompt} label="video prompt" />
             </div>
-            <textarea
-              className="input min-h-[104px] flex-1 resize-y font-mono text-xs leading-relaxed"
-              value={replaceEnabled ? videoPrompt : displayVideoPrompt}
-              placeholder="Pilih target model lalu klik Generate Prompt..."
-              onChange={(event) => {
-                setVideoPrompt(event.target.value)
-                setDirty(true)
-              }}
-              onBlur={commit}
-            />
           </div>
-        </div>
+
+          {videoPromptBusy && (
+            <div>
+              <div className="mb-1 flex items-center justify-between text-[11px] text-amber-300">
+                <span>Menyusun Video Motion Prompt sesuai aturan model terpilih...</span>
+                <span className="font-mono">proses</span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-ink-800">
+                <div className="h-full w-2/3 animate-pulse rounded-full bg-amber-500" />
+              </div>
+            </div>
+          )}
+
+          <textarea
+            className="input min-h-[104px] w-full resize-y font-mono text-xs leading-relaxed"
+            value={replaceEnabled ? videoPrompt : displayVideoPrompt}
+            placeholder="Kosong secara default — pilih target model lalu klik Generate Prompt."
+            onChange={(event) => {
+              setVideoPrompt(event.target.value)
+              setDirty(true)
+            }}
+            onBlur={commit}
+          />
+        </section>
 
         {/* Errors */}
         {scene.analysis_error && (
@@ -498,46 +642,6 @@ export default function SceneCard({
             Last Keyframe: {scene.last_image_error}
           </p>
         )}
-
-        {/* Action Bar */}
-        <div className="flex flex-wrap items-center gap-2 border-t border-ink-800 pt-3">
-          <select
-            className="input w-auto py-1.5 text-xs"
-            value={engine}
-            onChange={(event) => onEngineChange(event.target.value as ImageEngine)}
-            title="Image Engine untuk scene ini"
-          >
-            <option value="agy">agy</option>
-            <option value="codex">codex</option>
-          </select>
-
-          <button
-            type="button"
-            className="btn-ghost py-1.5 text-xs"
-            disabled={!prompt.trim() || busyAny || saving}
-            onClick={() => onGenerate(scene.id, 'first')}
-          >
-            {busyFirst ? 'Generating First...' : hasFirstGen ? 'Regenerate First' : 'Generate First'}
-          </button>
-
-          <button
-            type="button"
-            className="btn-ghost py-1.5 text-xs"
-            disabled={!(lastPrompt.trim() || prompt.trim()) || busyAny || saving}
-            onClick={() => onGenerate(scene.id, 'last')}
-          >
-            {busyLast ? 'Generating Last...' : hasLastGen ? 'Regenerate Last' : 'Generate Last'}
-          </button>
-
-          <button
-            type="button"
-            className="btn-primary ml-auto py-1.5 text-xs"
-            disabled={!prompt.trim() || busyAny || saving}
-            onClick={() => onGenerate(scene.id, 'both')}
-          >
-            {busyAny ? 'Generating...' : 'Generate Both (First + Last)'}
-          </button>
-        </div>
       </div>
     </article>
   )

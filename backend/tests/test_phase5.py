@@ -51,6 +51,10 @@ def test_analyze_prompt_video_prompt_only_mode():
     assert "pink-haired skater" in text
     assert '{"video_prompt": "..."}' in text
 
+    # Default Analyze leaves video_prompt out so it stays empty until generated per model.
+    default_analyze = analyze_prompt(scene, {})
+    assert '"video_prompt"' not in default_analyze
+
     parsed = analysis_from_payload({"video_prompt": "Wide tracking shot of [Char_1] riding downhill."})
     assert parsed.video_prompt.startswith("Wide tracking shot")
 

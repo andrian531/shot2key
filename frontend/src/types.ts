@@ -87,6 +87,7 @@ export interface Scene {
   detected_characters?: DetectedCharacter[]
   deep_timeline?: DeepTimelineItem[]
   deep_analyzing?: boolean
+  deep_progress?: { percent: number; message: string } | null
   replace_characters?: boolean
   character_mappings?: Record<string, SceneCharacterMapping>
   engine: string | null
