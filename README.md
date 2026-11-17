@@ -1,6 +1,8 @@
 # Shot2Key
 
-Local GUI studio that turns a reference video into a **scene-by-scene storyboard** (one scene per shot, each ≤ 10 s), analyzes frames & expressions, generates **First & Last Keyframe prompts/images** via local AI CLIs (`agy` / `codex`), and crafts **model-specific Video Motion Prompts** for Google Flow (`Omni 1.2 Flash`, `Veo 3.1 - Lite`), `Seedance 2.0`, `MiniMax`, and `Kling AI`.
+Local GUI studio that turns a reference video into a **scene-by-scene storyboard** (one scene per shot, each ≤ 10 s), analyzes frames & expressions, generates **First & Last Keyframe prompts/images**, and crafts **model-specific Video Motion Prompts** for Google Flow (`Omni 1.2 Flash`, `Veo 3.1 - Lite`), `Seedance 2.0`, `MiniMax`, and `Kling AI`.
+
+**Built to leverage your existing AI subscriptions (`agy` & `codex` CLIs):** instead of requiring separate pay-per-call API billing, Shot2Key uses your logged-in **Google AI Pro (`agy` CLI)** and **ChatGPT / Codex (`codex` CLI)** accounts for **everything** — scene analysis, Deep Analyze (0.5 s), keyframe image generation, and model-specific video prompt crafting. *(API providers exist in the backend and are hidden in the UI until tested.)*
 
 Video decomposition and vendor prompting specifications are powered by [`JuneYaooo/rea-video`](https://github.com/JuneYaooo/rea-video) (**Apache-2.0**) — used as an installed dependency, not vendored code.
 
@@ -12,8 +14,8 @@ Video decomposition and vendor prompting specifications are powered by [`JuneYao
 |---|---|---|
 | Python 3.10+ | backend + `rea-video` | https://www.python.org/downloads/ |
 | Node.js 18+ | frontend | https://nodejs.org/ |
-| `agy` CLI | keyframe generation / analysis | PowerShell: `irm https://antigravity.google/cli/install.ps1 \| iex` — docs: https://antigravity.google/docs/cli/reference |
-| `codex` CLI | keyframe generation / analysis | `npm install -g @openai/codex@latest` — repo: https://github.com/openai/codex |
+| `agy` CLI | video/frame analysis, prompt crafting & keyframe generation (uses your Google AI Pro login) | PowerShell: `irm https://antigravity.google/cli/install.ps1 \| iex` — docs: https://antigravity.google/docs/cli/reference |
+| `codex` CLI | video/frame analysis, prompt crafting & keyframe generation (uses your ChatGPT / Codex login) | `npm install -g @openai/codex@latest` — repo: https://github.com/openai/codex |
 
 `start.bat` **checks both CLIs first** and stops with the exact install command + official URL if one is missing. To run with only one of them:
 
@@ -44,7 +46,7 @@ The launcher creates `backend/.venv`, installs `backend/requirements.txt`, runs 
 3. **Per-Shot Splitting** keeps **one scene per shot** — shots are never merged, so a 3 s shot stays a 3 s scene. Only shots longer than `max_scene_seconds` (default 10, configurable `5 / 8 / 10` in Settings) are split evenly with fresh edge frames extracted.
 4. **Analyze (and Optional Deep Analyze 0.5 s)** sends First Frame + Last Frame + Contact Sheet (or frames sampled every 0.5 s in Deep Analyze) to `agy` / `codex` and stores `description`, **First Keyframe Prompt**, **Last Keyframe Prompt**, camera/lighting notes, `detected_characters`, and `deep_timeline`.
 5. **Inline Scene Clip Player** displays a 16:9 poster per scene and cuts/plays the exact scene MP4 lazily via `ffmpeg` **only when Play is clicked** (cached under `outputs/{id}/clips/`).
-6. **Replace Karakter Toggle** switches cleanly between natural descriptions (default, safe to copy directly to Google Flow) and `[Char_1]`, `[Char_2]` placeholder tags for manual character swapping in Flow.
+6. **Replace Karakter Toggle (Per-Character Selection)** switches cleanly between natural descriptions (default, safe to copy directly to Google Flow) and `[Char_1]`, `[Char_2]` placeholder tags for manual character swapping — with per-character checkboxes so background/supporting characters can stay natural while only main characters use `[Char_N]`.
 7. **Image Keyframe Generation (Optional)** generates new First and/or Last Keyframe PNGs directly via `agy` / `codex` — or you can copy the two Image Prompts to external generators like ChatGPT / Midjourney / Nano Banana.
 8. **Model-Specific Video Motion Prompt** starts empty by default; choose your target model (`Omni 1.2 Flash`, `Veo 3.1 - Lite`, `Seedance 2.0`, `MiniMax`, `Kling`) and click **Generate Prompt** to format the stored scene & deep-timeline data using that model's prompting rules.
 9. **Logs & Export ZIP** inspect every prompt/response in `data/logs/{project_id}.jsonl` via the **Logs** panel, or export a ZIP containing `keyframes/*.png`, `reference/*.jpg`, `prompts.json`, `VIDEO.md`, `storyboard.json`, `stems/*.wav`, and subtitles.
