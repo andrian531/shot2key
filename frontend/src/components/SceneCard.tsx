@@ -302,8 +302,8 @@ export default function SceneCard({
         </div>
       </div>
 
-      {/* Visual Strip: Referensi (First & Last) + Keyframe Hasil Generate (First & Last) */}
-      <div className="grid grid-cols-2 gap-px bg-ink-800 xl:grid-cols-4">
+      {/* Visual Strip: Hanya Referensi First & Last (2 kolom besar, mudah dilihat) */}
+      <div className="grid grid-cols-1 gap-px bg-ink-800 sm:grid-cols-2">
         <figure className="relative bg-ink-950">
           <img
             src={keyframeUrl}
@@ -311,7 +311,7 @@ export default function SceneCard({
             className="aspect-video w-full object-cover"
             loading="lazy"
           />
-          <figcaption className="absolute bottom-1.5 left-1.5 rounded bg-black/80 px-2 py-0.5 text-[11px] font-medium text-slate-200">
+          <figcaption className="absolute bottom-2 left-2 rounded bg-black/80 px-2 py-0.5 text-[11px] font-medium text-slate-200">
             Referensi First
           </figcaption>
         </figure>
@@ -329,50 +329,8 @@ export default function SceneCard({
               tidak ada last frame
             </div>
           )}
-          <figcaption className="absolute bottom-1.5 left-1.5 rounded bg-black/80 px-2 py-0.5 text-[11px] font-medium text-slate-200">
+          <figcaption className="absolute bottom-2 left-2 rounded bg-black/80 px-2 py-0.5 text-[11px] font-medium text-slate-200">
             Referensi Last
-          </figcaption>
-        </figure>
-
-        <figure className="relative bg-ink-950">
-          {hasFirstGen ? (
-            <img
-              src={imageUrl}
-              alt={`Generated first keyframe scene ${scene.index}`}
-              className="aspect-video w-full object-cover"
-              loading="lazy"
-            />
-          ) : (
-            <div className="grid aspect-video w-full place-items-center px-3 text-center text-[11px] leading-snug text-slate-400">
-              {busyFirst
-                ? 'menggenerate first keyframe...'
-                : analyzing || deepBusy
-                  ? 'menganalisis...'
-                  : 'Opsional: hasil gambar baru jika ingin ubah adegan/karakter'}
-            </div>
-          )}
-          <figcaption className="absolute bottom-1.5 left-1.5 rounded bg-black/80 px-2 py-0.5 text-[11px] font-medium text-amber-300">
-            Keyframe First
-          </figcaption>
-        </figure>
-
-        <figure className="relative bg-ink-950">
-          {hasLastGen ? (
-            <img
-              src={lastImageUrl}
-              alt={`Generated last keyframe scene ${scene.index}`}
-              className="aspect-video w-full object-cover"
-              loading="lazy"
-            />
-          ) : (
-            <div className="grid aspect-video w-full place-items-center px-3 text-center text-[11px] leading-snug text-slate-400">
-              {busyLast
-                ? 'menggenerate last keyframe...'
-                : 'Opsional: hasil gambar akhir baru jika ingin ubah adegan/karakter'}
-            </div>
-          )}
-          <figcaption className="absolute bottom-1.5 left-1.5 rounded bg-black/80 px-2 py-0.5 text-[11px] font-medium text-amber-300">
-            Keyframe Last
           </figcaption>
         </figure>
       </div>
@@ -382,7 +340,11 @@ export default function SceneCard({
         {(scene.description || scene.camera || scene.lighting) && (
           <div className="space-y-1.5 border-b border-ink-800 pb-3">
             {scene.description && (
-              <p className="text-xs leading-relaxed text-slate-200">{scene.description}</p>
+              <p className="text-xs leading-relaxed text-slate-200">
+                {replaceEnabled
+                  ? scene.description
+                  : formatPromptForMode(scene.description, scene, characters)}
+              </p>
             )}
             {(scene.camera || scene.lighting) && (
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-300">
@@ -525,6 +487,35 @@ export default function SceneCard({
                       : 'Generate First'}
                 </button>
               </div>
+              {scene.image_status !== 'idle' && (
+                <figure className="relative overflow-hidden rounded-lg border border-ink-800 bg-ink-950">
+                  {hasFirstGen ? (
+                    <>
+                      <img
+                        src={imageUrl}
+                        alt={`Generated first keyframe scene ${scene.index}`}
+                        className="aspect-video w-full object-cover"
+                        loading="lazy"
+                      />
+                      <div className="flex items-center justify-between border-t border-ink-800 px-2.5 py-1.5 text-[11px]">
+                        <span className="font-medium text-amber-300">Hasil Keyframe First</span>
+                        <a
+                          href={imageUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-slate-300 hover:text-strong hover:underline"
+                        >
+                          Buka penuh
+                        </a>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="grid aspect-video w-full place-items-center px-3 text-center text-xs text-slate-300">
+                      {busyFirst ? 'Menggenerate First Keyframe...' : 'Generate First Keyframe gagal'}
+                    </div>
+                  )}
+                </figure>
+              )}
             </div>
 
             {/* 2. Last Keyframe Prompt */}
@@ -561,6 +552,35 @@ export default function SceneCard({
                       : 'Generate Last'}
                 </button>
               </div>
+              {scene.last_image_status && scene.last_image_status !== 'idle' && (
+                <figure className="relative overflow-hidden rounded-lg border border-ink-800 bg-ink-950">
+                  {hasLastGen ? (
+                    <>
+                      <img
+                        src={lastImageUrl}
+                        alt={`Generated last keyframe scene ${scene.index}`}
+                        className="aspect-video w-full object-cover"
+                        loading="lazy"
+                      />
+                      <div className="flex items-center justify-between border-t border-ink-800 px-2.5 py-1.5 text-[11px]">
+                        <span className="font-medium text-amber-300">Hasil Keyframe Last</span>
+                        <a
+                          href={lastImageUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-slate-300 hover:text-strong hover:underline"
+                        >
+                          Buka penuh
+                        </a>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="grid aspect-video w-full place-items-center px-3 text-center text-xs text-slate-300">
+                      {busyLast ? 'Menggenerate Last Keyframe...' : 'Generate Last Keyframe gagal'}
+                    </div>
+                  )}
+                </figure>
+              )}
             </div>
           </div>
         </section>
