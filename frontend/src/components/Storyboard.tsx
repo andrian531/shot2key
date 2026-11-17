@@ -129,32 +129,52 @@ function LogsPanel({ projectId, onClose }: { projectId: string; onClose: () => v
         </p>
       ) : (
         <div className="max-h-[420px] divide-y divide-ink-800/70 overflow-y-auto">
-          {logs.map((entry, index) => (
-            <details key={`${entry.timestamp}-${index}`} className="px-3 py-2">
-              <summary className="flex cursor-pointer flex-wrap items-center gap-2 text-[11px]">
-                <span
-                  className={`badge ${
-                    entry.status === 'ok'
-                      ? 'bg-emerald-950/60 text-emerald-300'
-                      : 'bg-rose-950/60 text-rose-300'
-                  }`}
-                >
-                  {entry.status}
-                </span>
-                <span className="font-mono text-slate-300">{entry.action}</span>
-                <span className="text-slate-200">{entry.scene_id ?? '—'}</span>
-                <span className="text-slate-400">{entry.engine}</span>
-                <span className="font-mono text-slate-400">{entry.duration_ms} ms</span>
-                <span className="ml-auto font-mono text-[11px] text-slate-400">
-                  {entry.timestamp}
-                </span>
-              </summary>
-              <div className="mt-2 space-y-2 text-[11px]">
-                {entry.error && (
-                  <p className="rounded border border-rose-900/60 bg-rose-950/40 px-2 py-1 text-rose-300">
-                    {entry.error}
-                  </p>
-                )}
+          {logs.map((entry, index) => {
+            const modelName =
+              entry.model ??
+              (typeof entry.parsed?.model === 'string' ? entry.parsed.model : null)
+            const fallbackFrom =
+              entry.fallback_from ??
+              (typeof entry.parsed?.fallback_from === 'string'
+                ? entry.parsed.fallback_from
+                : null)
+            return (
+              <details key={`${entry.timestamp}-${index}`} className="px-3 py-2">
+                <summary className="flex cursor-pointer flex-wrap items-center gap-2 text-[11px]">
+                  <span
+                    className={`badge ${
+                      entry.status === 'ok'
+                        ? 'bg-emerald-950/60 text-emerald-300'
+                        : 'bg-rose-950/60 text-rose-300'
+                    }`}
+                  >
+                    {entry.status}
+                  </span>
+                  <span className="font-mono text-slate-300">{entry.action}</span>
+                  <span className="text-slate-200">{entry.scene_id ?? '—'}</span>
+                  <span className="rounded bg-ink-900 px-1.5 py-0.5 font-mono text-slate-300">
+                    {entry.engine}
+                    {modelName ? ` / ${modelName}` : ''}
+                  </span>
+                  {fallbackFrom && (
+                    <span className="badge bg-amber-950/60 text-amber-300">fallback</span>
+                  )}
+                  <span className="font-mono text-slate-400">{entry.duration_ms} ms</span>
+                  <span className="ml-auto font-mono text-[11px] text-slate-400">
+                    {entry.timestamp}
+                  </span>
+                </summary>
+                <div className="mt-2 space-y-2 text-[11px]">
+                  {fallbackFrom && (
+                    <p className="rounded border border-amber-900/60 bg-amber-950/40 px-2 py-1 text-amber-200">
+                      <strong>{t.logFallbackFromLabel}</strong> {fallbackFrom}
+                    </p>
+                  )}
+                  {entry.error && (
+                    <p className="rounded border border-rose-900/60 bg-rose-950/40 px-2 py-1 text-rose-300">
+                      {entry.error}
+                    </p>
+                  )}
                 {entry.input_images.length > 0 && (
                   <div>
                     <div className="label mb-1">{t.inputImagesLabel}</div>
@@ -173,15 +193,16 @@ function LogsPanel({ projectId, onClose }: { projectId: string; onClose: () => v
                     {entry.prompt_sent || '—'}
                   </pre>
                 </div>
-                <div>
-                  <div className="label mb-1">{t.rawResponseLabel}</div>
-                  <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-ink-900 p-2 font-mono text-[11px] text-slate-200">
-                    {entry.raw_response || '—'}
-                  </pre>
+                  <div>
+                    <div className="label mb-1">{t.rawResponseLabel}</div>
+                    <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-ink-900 p-2 font-mono text-[11px] text-slate-200">
+                      {entry.raw_response || '—'}
+                    </pre>
+                  </div>
                 </div>
-              </div>
-            </details>
-          ))}
+              </details>
+            )
+          })}
         </div>
       )}
     </div>
@@ -280,6 +301,27 @@ export default function Storyboard({
                     </option>
                   ))}
               </select>
+              {status?.defaults && (
+                <span
+                  className="hidden rounded border border-ink-800 bg-ink-950/70 px-2 py-1 font-mono text-[11px] text-slate-300 md:inline-block"
+                  title={`${
+                    (analyzer === 'agy'
+                      ? status.defaults.agy_model
+                      : status.defaults.codex_model) || 'default'
+                  }${
+                    status.defaults.fallback_analyzer
+                      ? ` → fallback: ${status.defaults.fallback_analyzer} (${status.defaults.fallback_model || 'default'})`
+                      : ''
+                  }`}
+                >
+                  {(analyzer === 'agy'
+                    ? status.defaults.agy_model
+                    : status.defaults.codex_model) || 'default'}
+                  {status.defaults.fallback_analyzer
+                    ? ` → ${status.defaults.fallback_analyzer}:${status.defaults.fallback_model || 'default'}`
+                    : ''}
+                </span>
+              )}
               <button
                 className="btn-primary py-1.5 text-xs"
                 disabled={!ready || analyzing || busy}

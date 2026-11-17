@@ -269,6 +269,15 @@ def _context(project: dict[str, Any], scene: dict[str, Any], previous: dict[str,
     }
 
 
+def _format_failed_attempts(engine: str) -> tuple[str, str]:
+    """Return display ``(engine_label, model_label)`` across primary and fallback attempts."""
+    attempts = registry.resolve_analyzer_attempts(engine)
+    if len(attempts) <= 1:
+        eng, mod = attempts[0] if attempts else (engine, registry.configured_model(engine))
+        return eng, mod
+    return " -> ".join(a[0] for a in attempts), " -> ".join(a[1] for a in attempts)
+
+
 async def _run_analyze(project_id: str, engine: str, scene_ids: Iterable[str] | None) -> None:
     project = store.load(project_id)
     analyzer = registry.analyzer(engine)
@@ -310,20 +319,24 @@ async def _run_analyze(project_id: str, engine: str, scene_ids: Iterable[str] | 
         images = [path for _, path in scene_input_images(scene)]
         started = time.perf_counter()
         try:
-            result = await analyzer.analyze(scene, context)
+            result, used_engine, used_model, fallback_reason = await registry.run_analyze_with_fallback(
+                scene, context, engine
+            )
         except (ProviderError, Exception) as exc:  # noqa: BLE001
             failures.append(f"{scene.get('id')}: {exc}")
+            err_engine, err_model = _format_failed_attempts(engine)
             prompt_logger.log_event(
                 project_id,
                 scene.get("id"),
                 "analyze",
-                engine,
+                err_engine,
                 prompt_sent=analyze_prompt(scene, context),
                 raw_response="",
                 input_images=images,
                 duration_ms=int((time.perf_counter() - started) * 1000),
                 status="error",
                 error=str(exc)[:2000],
+                model=err_model,
             )
             store.mutate(
                 project_id,
@@ -333,21 +346,26 @@ async def _run_analyze(project_id: str, engine: str, scene_ids: Iterable[str] | 
             )
         else:
             payload = result.to_dict()
+            log_parsed = {**payload, "model": used_model}
+            if fallback_reason:
+                log_parsed["fallback_from"] = fallback_reason
             prompt_logger.log_event(
                 project_id,
                 scene.get("id"),
                 "analyze",
-                engine,
+                used_engine,
                 prompt_sent=result.prompt_sent or analyze_prompt(scene, context),
                 raw_response=result.raw,
                 input_images=images,
-                parsed=payload,
+                parsed=log_parsed,
                 duration_ms=int((time.perf_counter() - started) * 1000),
                 status="ok",
+                model=used_model,
+                fallback_from=fallback_reason,
             )
             store.mutate(
                 project_id,
-                lambda p, sid=scene.get("id"), data=payload, eng=engine: _patch_scene(
+                lambda p, sid=scene.get("id"), data=payload, eng=used_engine: _patch_scene(
                     p,
                     sid,
                     description=data["description"],
@@ -435,19 +453,23 @@ async def _run_deep_analyze(project_id: str, scene_id: str, engine: str) -> None
     started = time.perf_counter()
 
     try:
-        result = await analyzer.analyze(scene, context)
+        result, used_engine, used_model, fallback_reason = await registry.run_analyze_with_fallback(
+            scene, context, engine
+        )
     except (ProviderError, Exception) as exc:  # noqa: BLE001
+        err_engine, err_model = _format_failed_attempts(engine)
         prompt_logger.log_event(
             project_id,
             scene_id,
             "deep_analyze",
-            engine,
+            err_engine,
             prompt_sent=analyze_prompt(scene, context),
             raw_response="",
             input_images=images,
             duration_ms=int((time.perf_counter() - started) * 1000),
             status="error",
             error=str(exc)[:2000],
+            model=err_model,
         )
         store.mutate(
             project_id,
@@ -462,19 +484,25 @@ async def _run_deep_analyze(project_id: str, scene_id: str, engine: str) -> None
         return
 
     payload = result.to_dict()
+    log_parsed = {**payload, "model": used_model}
+    if fallback_reason:
+        log_parsed["fallback_from"] = fallback_reason
     prompt_logger.log_event(
         project_id,
         scene_id,
         "deep_analyze",
-        engine,
+        used_engine,
         prompt_sent=result.prompt_sent or analyze_prompt(scene, context),
         raw_response=result.raw,
         input_images=images,
-        parsed=payload,
+        parsed=log_parsed,
         duration_ms=int((time.perf_counter() - started) * 1000),
         status="ok",
+        model=used_model,
+        fallback_from=fallback_reason,
     )
-    def apply_deep(p: dict[str, Any], data: dict[str, Any] = payload, eng: str = engine) -> None:
+
+    def apply_deep(p: dict[str, Any], data: dict[str, Any] = payload, eng: str = used_engine) -> None:
         current_scene = store.find_scene(p, scene_id) or {}
         next_deep_version = int(current_scene.get("deep_version") or 0) + 1
         _patch_scene(
@@ -530,19 +558,23 @@ async def _run_video_prompt(
     started = time.perf_counter()
 
     try:
-        result = await analyzer.analyze(scene, context)
+        result, used_engine, used_model, fallback_reason = await registry.run_analyze_with_fallback(
+            scene, context, engine
+        )
     except (ProviderError, Exception) as exc:  # noqa: BLE001
+        err_engine, err_model = _format_failed_attempts(engine)
         prompt_logger.log_event(
             project_id,
             scene_id,
             f"video_prompt:{model_id}",
-            engine,
+            err_engine,
             prompt_sent=analyze_prompt(scene, context),
             raw_response="",
             input_images=images,
             duration_ms=int((time.perf_counter() - started) * 1000),
             status="error",
             error=str(exc)[:2000],
+            model=err_model,
         )
         store.mutate(
             project_id,
@@ -552,17 +584,26 @@ async def _run_video_prompt(
         )
         return
 
+    log_parsed: dict[str, Any] = {
+        "video_model": model_id,
+        "model": used_model,
+        "video_prompt": result.video_prompt,
+    }
+    if fallback_reason:
+        log_parsed["fallback_from"] = fallback_reason
     prompt_logger.log_event(
         project_id,
         scene_id,
         f"video_prompt:{model_id}",
-        engine,
+        used_engine,
         prompt_sent=result.prompt_sent or analyze_prompt(scene, context),
         raw_response=result.raw,
         input_images=images,
-        parsed={"video_model": model_id, "video_prompt": result.video_prompt},
+        parsed=log_parsed,
         duration_ms=int((time.perf_counter() - started) * 1000),
         status="ok",
+        model=used_model,
+        fallback_from=fallback_reason,
     )
     generated_prompt = result.video_prompt or result.prompt
     entry = {
@@ -626,6 +667,7 @@ async def _generate_single_target(
 
     generator = registry.image_generator(engine)
     images = [path for _, path in scene_input_images(scene)]
+    gen_model = registry.configured_model(engine)
     started = time.perf_counter()
     async with _semaphore():
         try:
@@ -645,6 +687,7 @@ async def _generate_single_target(
                 duration_ms=int((time.perf_counter() - started) * 1000),
                 status="error",
                 error=str(exc)[:2000],
+                model=gen_model,
             )
             store.mutate(
                 project_id,
@@ -665,6 +708,7 @@ async def _generate_single_target(
         parsed={"image_path": str(out_path), "target": target},
         duration_ms=int((time.perf_counter() - started) * 1000),
         status="ok",
+        model=gen_model,
     )
     store.mutate(
         project_id,

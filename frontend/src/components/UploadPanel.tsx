@@ -99,7 +99,7 @@ export default function UploadPanel({
             {projects.map((project) => (
               <li
                 key={project.id}
-                className="group flex items-center gap-3 rounded-lg border border-ink-800 bg-ink-850 px-3 py-2"
+                className="flex items-center gap-3 rounded-lg border border-ink-800 bg-ink-850 px-3 py-2"
               >
                 <button className="min-w-0 flex-1 text-left" onClick={() => onOpen(project.id)}>
                   <div className="truncate text-sm text-slate-200">{project.filename}</div>
@@ -110,11 +110,28 @@ export default function UploadPanel({
                   </div>
                 </button>
                 <button
-                  className="rounded px-2 py-1 text-[11px] text-slate-500 opacity-0 transition-opacity hover:text-rose-300 group-hover:opacity-100"
+                  type="button"
+                  className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-rose-950/50 hover:text-rose-300"
                   onClick={() => onDelete(project.id)}
                   title={t.deleteProjectTitle}
+                  aria-label={t.deleteProjectTitle}
                 >
-                  {t.deleteLabel}
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-4 w-4"
+                    aria-hidden="true"
+                  >
+                    <path d="M3 6h18" />
+                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                    <line x1="10" y1="11" x2="10" y2="17" />
+                    <line x1="14" y1="11" x2="14" y2="17" />
+                  </svg>
                 </button>
               </li>
             ))}

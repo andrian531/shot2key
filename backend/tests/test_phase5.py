@@ -278,3 +278,179 @@ def test_video_prompt_saved_per_model_with_metadata(client, monkeypatch, tmp_pat
     scene_after = patch_resp.json()["scenes"][0]
     assert scene_after["video_prompts"]["seedance_2_0"]["prompt"] == "edited seedance"
     assert scene_after["video_prompts"]["omni_1_2"]["prompt"] == "generated for omni_1_2"
+
+
+def test_cli_list_models_and_model_flags(monkeypatch, tmp_path: Path):
+    import json as json_mod
+    from types import SimpleNamespace
+    from providers import cli_provider
+
+    # agy models parsing
+    monkeypatch.setattr(cli_provider, "cli_path", lambda engine: f"/fake/{engine}")
+    monkeypatch.setattr(
+        cli_provider.subprocess,
+        "run",
+        lambda *a, **kw: SimpleNamespace(
+            returncode=0,
+            stdout="Fetching available models...\ngemini-4-argon-medium\tGemini 4 Argon\nclaude-opus-5-5-high\tClaude\n",
+            stderr="",
+        ),
+    )
+    assert cli_provider.list_models("agy") == [
+        "default",
+        "gemini-4-argon-medium",
+        "claude-opus-5-5-high",
+    ]
+
+    # codex ~/.codex/models_cache.json parsing
+    fake_home = tmp_path / "home"
+    (fake_home / ".codex").mkdir(parents=True)
+    (fake_home / ".codex" / "models_cache.json").write_text(
+        json_mod.dumps({"models": [{"slug": "gpt-6.1-sol"}, {"slug": "gpt-5.6-sol"}]}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+    assert cli_provider.list_models("codex") == ["default", "gpt-6.1-sol", "gpt-5.6-sol"]
+
+    # Verify --model and -m flags passed only when non-default
+    seen_cmds: list[list[str]] = []
+
+    def fake_run(cmd, cwd, timeout, stdin_text=None):
+        seen_cmds.append(list(cmd))
+        return SimpleNamespace(returncode=0, stdout='{"prompt":"ok"}', stderr="")
+
+    monkeypatch.setattr(cli_provider, "_run", fake_run)
+    cli_provider._run_agy("hello", tmp_path, 30, model="gemini-4-argon-medium")
+    cli_provider._run_agy("hello", tmp_path, 30, model="default")
+    cli_provider._run_codex("hello", tmp_path, 30, model="gpt-6.1-sol")
+    cli_provider._run_codex("hello", tmp_path, 30, model="default")
+
+    assert "--model" in seen_cmds[0] and "gemini-4-argon-medium" in seen_cmds[0]
+    assert "--model" not in seen_cmds[1]
+    assert "-m" in seen_cmds[2] and "gpt-6.1-sol" in seen_cmds[2]
+    assert "-m" not in seen_cmds[3]
+
+
+def test_settings_cli_models_and_fallback_execution(client, monkeypatch):
+    import asyncio
+    from providers import cli_provider, registry
+    from providers.base import ProviderError, SceneAnalysis
+
+    monkeypatch.setattr(cli_provider, "list_models", lambda eng: ["default", f"{eng}-m1"])
+    monkeypatch.setattr(cli_provider, "cli_path", lambda eng: f"/bin/{eng}")
+
+    r_models = client.get("/api/settings/cli-models/agy")
+    assert r_models.status_code == 200
+    assert r_models.json()["models"] == ["default", "agy-m1"]
+    assert client.get("/api/settings/cli-models/unknown").status_code == 400
+
+    put_resp = client.put(
+        "/api/settings",
+        json={
+            "default_analyzer": "agy",
+            "agy_model": "gemini-4-argon-medium",
+            "codex_model": "gpt-6.1-sol",
+            "fallback_analyzer": "codex",
+            "fallback_model": "gpt-6.1-sol",
+        },
+    )
+    assert put_resp.status_code == 200
+    saved = put_resp.json()["settings"]
+    assert saved["agy_model"] == "gemini-4-argon-medium"
+    assert saved["fallback_analyzer"] == "codex"
+    assert saved["fallback_model"] == "gpt-6.1-sol"
+
+    calls: list[tuple[str, str]] = []
+
+    class FakeAnalyzer:
+        def __init__(self, engine: str):
+            self.engine = engine
+
+        async def analyze(self, scene, context):
+            model = context.get("model", "")
+            calls.append((self.engine, model))
+            if self.engine == "agy":
+                raise ProviderError("rate limited")
+            return SceneAnalysis(description="ok", prompt="p", raw="{}")
+
+    monkeypatch.setattr(registry, "analyzer", lambda eng: FakeAnalyzer(eng))
+
+    result, used_engine, used_model, fb_reason = asyncio.run(
+        registry.run_analyze_with_fallback({"id": "scene_001"}, {}, "agy")
+    )
+    assert calls == [("agy", "gemini-4-argon-medium"), ("codex", "gpt-6.1-sol")]
+    assert used_engine == "codex"
+    assert used_model == "gpt-6.1-sol"
+    assert fb_reason and "agy (gemini-4-argon-medium)" in fb_reason
+    assert result.prompt == "p"
+
+
+def test_logs_include_provider_model_and_fallback(client, monkeypatch, tmp_path: Path):
+    import asyncio
+    from core import jobs, prompt_logger
+    from providers import registry
+    from providers.base import ProviderError, SceneAnalysis
+
+    client.put(
+        "/api/settings",
+        json={
+            "default_analyzer": "agy",
+            "agy_model": "gemini-4-argon-medium",
+            "fallback_analyzer": "codex",
+            "fallback_model": "gpt-6.1-sol",
+        },
+    )
+
+    project = store.create("clip.mp4", str(tmp_path / "clip.mp4"), size_bytes=10)
+    store.mutate(
+        project["id"],
+        lambda p: p.update(
+            status="ready",
+            scenes=[
+                {
+                    "id": "scene_001",
+                    "index": 1,
+                    "start_time": 0.0,
+                    "end_time": 3.0,
+                    "duration": 3.0,
+                    "description": "",
+                    "prompt": "",
+                    "last_prompt": "",
+                    "video_prompt": "",
+                    "camera": "",
+                    "lighting": "",
+                }
+            ],
+        ),
+    )
+
+    class FallbackAnalyzer:
+        def __init__(self, engine: str):
+            self.engine = engine
+
+        async def analyze(self, scene, context):
+            if self.engine == "agy":
+                raise ProviderError("agy quota exceeded")
+            return SceneAnalysis(description="d", prompt="p", raw="{}")
+
+    monkeypatch.setattr(registry, "analyzer", lambda eng: FallbackAnalyzer(eng))
+    asyncio.run(jobs._run_analyze(project["id"], "agy", None))
+
+    logs = prompt_logger.read_logs(project["id"])
+    assert len(logs) == 1
+    assert logs[0]["status"] == "ok"
+    assert logs[0]["engine"] == "codex"
+    assert logs[0]["model"] == "gpt-6.1-sol"
+    assert "agy (gemini-4-argon-medium)" in (logs[0]["fallback_from"] or "")
+
+    class AllFailAnalyzer:
+        async def analyze(self, scene, context):
+            raise ProviderError("timeout")
+
+    monkeypatch.setattr(registry, "analyzer", lambda eng: AllFailAnalyzer())
+    asyncio.run(jobs._run_video_prompt(project["id"], "scene_001", "omni_1_2", "agy"))
+
+    logs_after = prompt_logger.read_logs(project["id"])
+    assert logs_after[0]["status"] == "error"
+    assert logs_after[0]["engine"] == "agy -> codex"
+    assert logs_after[0]["model"] == "gemini-4-argon-medium -> gpt-6.1-sol"

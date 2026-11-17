@@ -1,15 +1,43 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api/client'
 import type { Settings } from '../types'
 import { useApp } from '../state/AppContext'
+
+function withSelected(models: string[], current: string | undefined): string[] {
+  const base = models.length > 0 ? [...models] : ['default']
+  const val = (current || 'default').trim() || 'default'
+  if (!base.includes(val)) base.push(val)
+  return base
+}
 
 /** `/settings` — API keys, default engines, auto-analyze and style prompt. */
 export default function SettingsView() {
   const { refreshStatus, t } = useApp()
   const [settings, setSettings] = useState<Settings | null>(null)
+  const [cliModels, setCliModels] = useState<{ agy: string[]; codex: string[] }>({
+    agy: ['default'],
+    codex: ['default'],
+  })
+  const [loadingModels, setLoadingModels] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+
+  const refreshCliModels = useCallback(async () => {
+    setLoadingModels(true)
+    try {
+      const [agyRes, codexRes] = await Promise.all([
+        api.getCliModels('agy').catch(() => ({ models: ['default'] })),
+        api.getCliModels('codex').catch(() => ({ models: ['default'] })),
+      ])
+      setCliModels({
+        agy: agyRes.models?.length ? agyRes.models : ['default'],
+        codex: codexRes.models?.length ? codexRes.models : ['default'],
+      })
+    } finally {
+      setLoadingModels(false)
+    }
+  }, [])
 
   useEffect(() => {
     document.title = `${t.settingsTitle} · Shot2Key`
@@ -20,7 +48,8 @@ export default function SettingsView() {
       .getSettings()
       .then(setSettings)
       .catch((err: Error) => setError(err.message))
-  }, [])
+    void refreshCliModels()
+  }, [refreshCliModels])
 
   function update<K extends keyof Settings>(key: K, value: Settings[K]) {
     setSettings((current) => (current ? { ...current, [key]: value } : current))
@@ -39,6 +68,10 @@ export default function SettingsView() {
         openai_api_key: settings.openai_api_key,
         openai_model: settings.openai_model,
         default_analyzer: settings.default_analyzer,
+        agy_model: settings.agy_model ?? 'default',
+        codex_model: settings.codex_model ?? 'default',
+        fallback_analyzer: settings.fallback_analyzer ?? '',
+        fallback_model: settings.fallback_model ?? 'default',
         default_image_engine: settings.default_image_engine,
         rea_video_lang: settings.rea_video_lang,
         rea_video_vlm: settings.rea_video_vlm,
@@ -121,7 +154,17 @@ export default function SettingsView() {
           </section> */}
 
           <section className="card space-y-4 p-5">
-            <h2 className="text-sm font-semibold text-strong">{t.engineSectionTitle}</h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-strong">{t.engineSectionTitle}</h2>
+              <button
+                type="button"
+                className="btn-ghost py-1 text-xs"
+                disabled={loadingModels}
+                onClick={() => void refreshCliModels()}
+              >
+                {loadingModels ? t.loadingModelsBtn : t.refreshModelsBtn}
+              </button>
+            </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className="label">{t.defaultAnalyzerLabel}</label>
@@ -140,6 +183,36 @@ export default function SettingsView() {
                   */}
                 </select>
               </div>
+              {(settings.default_analyzer === 'agy' || settings.default_analyzer === 'codex') && (
+                <div>
+                  <label className="label">{t.defaultModelLabel}</label>
+                  <select
+                    className="input"
+                    value={
+                      (settings.default_analyzer === 'agy'
+                        ? settings.agy_model
+                        : settings.codex_model) || 'default'
+                    }
+                    onChange={(event) =>
+                      update(
+                        settings.default_analyzer === 'agy' ? 'agy_model' : 'codex_model',
+                        event.target.value,
+                      )
+                    }
+                  >
+                    {withSelected(
+                      cliModels[settings.default_analyzer],
+                      settings.default_analyzer === 'agy'
+                        ? settings.agy_model
+                        : settings.codex_model,
+                    ).map((m) => (
+                      <option key={m} value={m}>
+                        {m === 'default' ? t.defaultCliConfigOption : m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               {/* Image generation UI sementara disembunyikan (dormant) karena alur kerja memakai generator eksternal (Google Flow, dll.).
               <div>
                 <label className="label">{t.defaultImageEngineLabel}</label>
@@ -158,6 +231,63 @@ export default function SettingsView() {
                 </select>
               </div>
               */}
+            </div>
+
+            <div className="space-y-2 rounded-lg border border-ink-800 bg-ink-950/50 p-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="label">{t.fallbackAnalyzerLabel}</label>
+                  <select
+                    className="input"
+                    value={settings.fallback_analyzer ?? ''}
+                    onChange={(event) => {
+                      const nextEngine = event.target.value
+                      setSettings((current) => {
+                        if (!current) return current
+                        const nextList =
+                          nextEngine === 'agy' || nextEngine === 'codex'
+                            ? cliModels[nextEngine]
+                            : ['default']
+                        const curFbModel = current.fallback_model || 'default'
+                        return {
+                          ...current,
+                          fallback_analyzer: nextEngine,
+                          fallback_model: nextList.includes(curFbModel) ? curFbModel : 'default',
+                        }
+                      })
+                    }}
+                  >
+                    <option value="">{t.fallbackDisabledOption}</option>
+                    <option value="agy">agy</option>
+                    <option value="codex">codex</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="label">{t.fallbackModelLabel}</label>
+                  <select
+                    className="input"
+                    disabled={
+                      settings.fallback_analyzer !== 'agy' &&
+                      settings.fallback_analyzer !== 'codex'
+                    }
+                    value={settings.fallback_model || 'default'}
+                    onChange={(event) => update('fallback_model', event.target.value)}
+                  >
+                    {withSelected(
+                      settings.fallback_analyzer === 'agy' ||
+                        settings.fallback_analyzer === 'codex'
+                        ? cliModels[settings.fallback_analyzer]
+                        : ['default'],
+                      settings.fallback_model,
+                    ).map((m) => (
+                      <option key={m} value={m}>
+                        {m === 'default' ? t.defaultCliConfigOption : m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-400">{t.fallbackHint}</p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">

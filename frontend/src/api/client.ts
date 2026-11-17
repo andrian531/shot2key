@@ -129,6 +129,11 @@ export const api = {
       body: JSON.stringify(values),
     }).then((data) => data.settings),
 
+  getCliModels: (engine: 'agy' | 'codex') =>
+    request<{ engine: string; available: boolean; models: string[] }>(
+      `/settings/cli-models/${engine}`,
+    ),
+
   exportUrl: (id: string) => `${BASE}/projects/${id}/export`,
   keyframeUrl: (id: string, sceneId: string) => `${BASE}/projects/${id}/scenes/${sceneId}/keyframe`,
   lastKeyframeUrl: (id: string, sceneId: string) =>

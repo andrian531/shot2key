@@ -25,7 +25,14 @@ export interface SystemStatus {
   analyzers_ready: Record<string, boolean>
   engines: { analyzers: Engine[]; image_engines: ImageEngine[] }
   video_models?: VideoModelOption[]
-  defaults: { analyzer: Engine; image_engine: ImageEngine }
+  defaults: {
+    analyzer: Engine
+    agy_model?: string
+    codex_model?: string
+    fallback_analyzer?: string
+    fallback_model?: string
+    image_engine: ImageEngine
+  }
   max_scene_seconds: number
   python: string
   platform: string
@@ -116,6 +123,8 @@ export interface PromptLogEntry {
   scene_id: string | null
   action: string
   engine: string
+  model?: string | null
+  fallback_from?: string | null
   input_images: string[]
   prompt_sent: string
   raw_response: string
@@ -165,6 +174,10 @@ export interface Settings {
   openai_api_key_set: boolean
   openai_model: string
   default_analyzer: Engine
+  agy_model?: string
+  codex_model?: string
+  fallback_analyzer?: string
+  fallback_model?: string
   default_image_engine: ImageEngine
   rea_video_lang: string
   rea_video_vlm: boolean

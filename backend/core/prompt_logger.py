@@ -60,6 +60,8 @@ def log_event(
     duration_ms: int = 0,
     status: str = "ok",
     error: str | None = None,
+    model: str | None = None,
+    fallback_from: str | None = None,
 ) -> dict[str, Any]:
     """Append one event to the project's JSONL log and return it."""
     entry = {
@@ -67,6 +69,8 @@ def log_event(
         "scene_id": scene_id,
         "action": action,
         "engine": engine,
+        "model": model,
+        "fallback_from": fallback_from,
         "input_images": list(input_images or []),
         "prompt_sent": _clip(prompt_sent or ""),
         "raw_response": _clip(raw_response or ""),

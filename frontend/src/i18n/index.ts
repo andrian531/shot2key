@@ -52,6 +52,7 @@ export interface UIStrings {
   inputImagesLabel: string
   promptSentLabel: string
   rawResponseLabel: string
+  logFallbackFromLabel: string
   analyzingProgress: (done: number, total: number, engine: string) => string
   generatingProgress: (done: number, total: number, engine: string) => string
   decomposeFailed: (err: string) => string
@@ -142,6 +143,14 @@ export interface UIStrings {
   loadSettingsFailed: (err: string) => string
   engineSectionTitle: string
   defaultAnalyzerLabel: string
+  defaultModelLabel: string
+  defaultCliConfigOption: string
+  refreshModelsBtn: string
+  loadingModelsBtn: string
+  fallbackAnalyzerLabel: string
+  fallbackDisabledOption: string
+  fallbackModelLabel: string
+  fallbackHint: string
   defaultImageEngineLabel: string
   maxDurationLabel: string
   maxDurationHint: string
@@ -205,6 +214,7 @@ const id: UIStrings = {
   inputImagesLabel: 'gambar masukan',
   promptSentLabel: 'prompt terkirim',
   rawResponseLabel: 'respons mentah',
+  logFallbackFromLabel: 'Fallback dari error utama:',
   analyzingProgress: (done, total, engine) =>
     `Menganalisis & membuat prompt otomatis (${done}/${total} adegan) dengan ${engine}...`,
   generatingProgress: (done, total, engine) =>
@@ -297,6 +307,15 @@ const id: UIStrings = {
   loadSettingsFailed: (err) => `Gagal memuat pengaturan: ${err}`,
   engineSectionTitle: 'Engine Bawaan',
   defaultAnalyzerLabel: 'Penganalisis bawaan',
+  defaultModelLabel: 'Model CLI bawaan',
+  defaultCliConfigOption: 'default (bawaan CLI)',
+  refreshModelsBtn: 'Muat ulang daftar model',
+  loadingModelsBtn: 'Memuat model...',
+  fallbackAnalyzerLabel: 'Penganalisis cadangan (Fallback)',
+  fallbackDisabledOption: 'Tidak ada (nonaktif)',
+  fallbackModelLabel: 'Model cadangan',
+  fallbackHint:
+    'Jika engine utama gagal atau terkena limit kuota, Shot2Key otomatis mengulang adegan dengan engine dan model cadangan.',
   defaultImageEngineLabel: 'Engine gambar bawaan',
   maxDurationLabel: 'Maks. durasi adegan (detik)',
   maxDurationHint: 'Shot tidak pernah digabung; shot yang lebih panjang akan dipecah.',
@@ -360,6 +379,7 @@ const en: UIStrings = {
   inputImagesLabel: 'input images',
   promptSentLabel: 'prompt sent',
   rawResponseLabel: 'raw response',
+  logFallbackFromLabel: 'Fallback from primary error:',
   analyzingProgress: (done, total, engine) =>
     `Analyzing & crafting prompts (${done}/${total} scenes) with ${engine}...`,
   generatingProgress: (done, total, engine) =>
@@ -452,6 +472,15 @@ const en: UIStrings = {
   loadSettingsFailed: (err) => `Failed to load settings: ${err}`,
   engineSectionTitle: 'Default Engines',
   defaultAnalyzerLabel: 'Default analyzer',
+  defaultModelLabel: 'Default CLI model',
+  defaultCliConfigOption: 'default (CLI config)',
+  refreshModelsBtn: 'Refresh models',
+  loadingModelsBtn: 'Loading models...',
+  fallbackAnalyzerLabel: 'Fallback analyzer (on failure)',
+  fallbackDisabledOption: 'None (disabled)',
+  fallbackModelLabel: 'Fallback model',
+  fallbackHint:
+    'If the primary analyzer fails or hits quota limits, Shot2Key automatically retries that scene with the fallback engine and model.',
   defaultImageEngineLabel: 'Default image engine',
   maxDurationLabel: 'Max scene duration (seconds)',
   maxDurationHint: 'Shots are never merged; longer shots are split evenly.',

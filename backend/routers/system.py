@@ -47,6 +47,10 @@ def status() -> dict[str, object]:
         "video_models": list_video_models(),
         "defaults": {
             "analyzer": settings.get("default_analyzer"),
+            "agy_model": settings.get("agy_model") or "default",
+            "codex_model": settings.get("codex_model") or "default",
+            "fallback_analyzer": settings.get("fallback_analyzer") or "",
+            "fallback_model": settings.get("fallback_model") or "default",
             "image_engine": settings.get("default_image_engine"),
         },
         "max_scene_seconds": config.MAX_SCENE_SECONDS,
