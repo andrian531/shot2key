@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import type {
   Character,
   Engine,
-  ImageEngine,
   Project,
   PromptLogEntry,
   SceneCharacterMapping,
@@ -19,19 +18,13 @@ interface Props {
   characters: Character[]
   status: SystemStatus | null
   analyzer: Engine
-  imageEngine: ImageEngine
-  sceneEngines: Record<string, ImageEngine>
   busy: boolean
   error: string | null
   onBack: () => void
   onAnalyzerChange: (engine: Engine) => void
-  onImageEngineChange: (engine: ImageEngine) => void
-  onSceneEngineChange: (sceneId: string, engine: ImageEngine) => void
   onAnalyze: () => void
   onDeepAnalyze: (sceneId: string) => void
   onGenerateVideoPrompt: (sceneId: string, model: string) => void
-  onGenerateAll: (target?: 'first' | 'last' | 'both') => void
-  onGenerateScene: (sceneId: string, target?: 'first' | 'last' | 'both') => void
   onSavePrompt: (sceneId: string, patch: ScenePromptPatch) => Promise<void>
   onUpdateSceneCharacters: (
     sceneId: string,
@@ -218,19 +211,13 @@ export default function Storyboard({
   characters,
   status,
   analyzer,
-  imageEngine,
-  sceneEngines,
   busy,
   error,
   onBack,
   onAnalyzerChange,
-  onImageEngineChange,
-  onSceneEngineChange,
   onAnalyze,
   onDeepAnalyze,
   onGenerateVideoPrompt,
-  onGenerateAll,
-  onGenerateScene,
   onSavePrompt,
   onUpdateSceneCharacters,
   onApplyCharactersAll,
@@ -255,10 +242,8 @@ export default function Storyboard({
   const activeScene = selectedIndex >= 0 ? scenes[selectedIndex] : scenes[0]
 
   const analyzing = project.analysis?.status === 'running'
-  const generating = project.generation?.status === 'running'
   const ready = project.status === 'ready'
   const withPrompt = scenes.filter((scene) => scene.prompt.trim()).length
-  const withImage = scenes.filter((scene) => scene.image_status === 'done').length
 
   return (
     <div className="mx-auto max-w-[1600px] px-5 py-6">
@@ -296,30 +281,11 @@ export default function Storyboard({
                   ))}
               </select>
               <button
-                className="btn-ghost py-1.5 text-xs"
+                className="btn-primary py-1.5 text-xs"
                 disabled={!ready || analyzing || busy}
                 onClick={onAnalyze}
               >
                 {analyzing ? t.analyzingBtn : t.analyzeBtn}
-              </button>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-slate-400">{t.imageEngineLabel}</span>
-              <select
-                className="input w-auto py-1.5 text-xs"
-                value={imageEngine}
-                onChange={(event) => onImageEngineChange(event.target.value as ImageEngine)}
-              >
-                <option value="agy">agy</option>
-                <option value="codex">codex</option>
-              </select>
-              <button
-                className="btn-primary py-1.5 text-xs"
-                disabled={!ready || generating || withPrompt === 0}
-                onClick={() => onGenerateAll('first')}
-              >
-                {generating ? t.generatingAll : t.generateFirstAll(withPrompt)}
               </button>
             </div>
 
@@ -382,43 +348,6 @@ export default function Storyboard({
           </div>
         )}
 
-        {generating && (
-          <div className="mt-3">
-            <div className="mb-1 flex items-center justify-between text-[11px] text-emerald-300">
-              <span>
-                {t.generatingProgress(
-                  project.generation?.done ?? 0,
-                  project.generation?.queued ?? scenes.length,
-                  project.generation?.engine ?? imageEngine,
-                )}
-              </span>
-              <span className="font-mono">
-                {Math.round(
-                  ((project.generation?.done ?? 0) /
-                    Math.max(1, project.generation?.queued ?? scenes.length)) *
-                    100,
-                )}
-                %
-              </span>
-            </div>
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-ink-800">
-              <div
-                className="h-full animate-pulse rounded-full bg-emerald-500 transition-all duration-500"
-                style={{
-                  width: `${Math.max(
-                    8,
-                    Math.round(
-                      ((project.generation?.done ?? 0) /
-                        Math.max(1, project.generation?.queued ?? scenes.length)) *
-                        100,
-                    ),
-                  )}%`,
-                }}
-              />
-            </div>
-          </div>
-        )}
-
         {project.status === 'failed' && (
           <p className="mt-3 rounded-lg border border-rose-900/60 bg-rose-950/40 px-3 py-2 text-xs text-rose-300">
             {t.decomposeFailed(project.error ?? '')}
@@ -436,9 +365,6 @@ export default function Storyboard({
             <span>
               {t.promptCountLabel}: <span className="text-slate-200">{withPrompt}</span>/{scenes.length}
             </span>
-            <span>
-              {t.keyframeCountLabel}: <span className="text-slate-200">{withImage}</span>/{scenes.length}
-            </span>
             {project.analysis?.status === 'running' && (
               <span className="text-amber-300">
                 analyze {project.analysis.done ?? 0}/{project.analysis.total ?? scenes.length}
@@ -446,16 +372,6 @@ export default function Storyboard({
             )}
             {project.analysis?.status === 'partial' && (
               <span className="text-amber-300">{t.partialAnalyzeWarning}</span>
-            )}
-            {project.generation?.status === 'running' && (
-              <span className="text-emerald-300">
-                generate {project.generation.done}/{project.generation.queued}
-              </span>
-            )}
-            {project.generation?.status === 'partial' && (
-              <span className="text-amber-300">
-                {t.failedKeyframesWarning(project.generation.failed)}
-              </span>
             )}
             {project.subtitles?.srt && <span className="text-emerald-400">{t.subtitlesReady}</span>}
           </div>
@@ -473,8 +389,6 @@ export default function Storyboard({
               {scenes.map((scene) => {
                 const selected = scene.id === activeScene.id
                 const hasPrompt = Boolean(scene.prompt.trim())
-                const hasKeyframe = scene.image_status === 'done'
-                const hasLastKeyframe = scene.last_image_status === 'done'
                 return (
                   <button
                     key={scene.id}
@@ -487,11 +401,7 @@ export default function Storyboard({
                     }`}
                   >
                     <img
-                      src={
-                        hasKeyframe
-                          ? `/api/projects/${project.id}/scenes/${scene.id}/image`
-                          : `/api/projects/${project.id}/scenes/${scene.id}/keyframe`
-                      }
+                      src={api.keyframeUrl(project.id, scene.id)}
                       alt={`Scene ${scene.index}`}
                       className="h-12 w-20 shrink-0 rounded bg-ink-950 object-cover"
                       loading="lazy"
@@ -530,16 +440,6 @@ export default function Storyboard({
                                 ? t.statusQueued
                                 : t.statusEmpty}
                         </span>
-                        {hasKeyframe && (
-                          <span className="rounded bg-emerald-950/60 px-1.5 py-0.5 text-emerald-300">
-                            {t.statusFirstOk}
-                          </span>
-                        )}
-                        {hasLastKeyframe && (
-                          <span className="rounded bg-emerald-950/60 px-1.5 py-0.5 text-emerald-300">
-                            {t.statusLastOk}
-                          </span>
-                        )}
                       </div>
                     </div>
                   </button>
@@ -581,18 +481,13 @@ export default function Storyboard({
               characters={characters}
               videoModels={status?.video_models ?? []}
               analyzing={analyzing}
-              engine={sceneEngines[activeScene.id] ?? imageEngine}
-              onEngineChange={(engine) => onSceneEngineChange(activeScene.id, engine)}
               onSavePrompt={onSavePrompt}
               onUpdateSceneCharacters={onUpdateSceneCharacters}
               onApplyCharactersAll={onApplyCharactersAll}
               onDeepAnalyze={onDeepAnalyze}
               onGenerateVideoPrompt={onGenerateVideoPrompt}
-              onGenerate={onGenerateScene}
               keyframeUrl={api.keyframeUrl(project.id, activeScene.id)}
               lastKeyframeUrl={api.lastKeyframeUrl(project.id, activeScene.id)}
-              imageUrl={api.imageUrl(project.id, activeScene.id)}
-              lastImageUrl={api.lastImageUrl(project.id, activeScene.id)}
               clipUrl={api.sceneClipUrl(project.id, activeScene.id)}
               clipDownloadUrl={api.sceneClipUrl(project.id, activeScene.id, true)}
             />

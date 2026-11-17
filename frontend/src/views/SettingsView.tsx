@@ -122,7 +122,7 @@ export default function SettingsView() {
 
           <section className="card space-y-4 p-5">
             <h2 className="text-sm font-semibold text-strong">{t.engineSectionTitle}</h2>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className="label">{t.defaultAnalyzerLabel}</label>
                 <select
@@ -140,6 +140,7 @@ export default function SettingsView() {
                   */}
                 </select>
               </div>
+              {/* Image generation UI sementara disembunyikan (dormant) karena alur kerja memakai generator eksternal (Google Flow, dll.).
               <div>
                 <label className="label">{t.defaultImageEngineLabel}</label>
                 <select
@@ -156,6 +157,7 @@ export default function SettingsView() {
                   <option value="codex">codex</option>
                 </select>
               </div>
+              */}
             </div>
 
             <div className="grid grid-cols-2 gap-3">

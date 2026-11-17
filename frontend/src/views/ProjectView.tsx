@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api/client'
-import type { Engine, ImageEngine, Project, SceneCharacterMapping } from '../types'
+import type { Engine, Project, SceneCharacterMapping } from '../types'
 import Storyboard from '../components/Storyboard'
 import { useApp } from '../state/AppContext'
 
@@ -10,19 +10,12 @@ const POLL_MS = 1500
 function needsPolling(project: Project | null): boolean {
   if (!project) return false
   const anySceneBusy = (project.scenes ?? []).some(
-    (scene) =>
-      scene.deep_analyzing ||
-      scene.video_prompt_generating ||
-      scene.image_status === 'queued' ||
-      scene.image_status === 'generating' ||
-      scene.last_image_status === 'queued' ||
-      scene.last_image_status === 'generating',
+    (scene) => scene.deep_analyzing || scene.video_prompt_generating,
   )
   return (
     project.status === 'decomposing' ||
     project.status === 'uploaded' ||
     project.analysis?.status === 'running' ||
-    project.generation?.status === 'running' ||
     anySceneBusy
   )
 }
@@ -37,8 +30,6 @@ export default function ProjectView() {
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [analyzer, setAnalyzer] = useState<Engine>('agy')
-  const [imageEngine, setImageEngine] = useState<ImageEngine>('agy')
-  const [sceneEngines, setSceneEngines] = useState<Record<string, ImageEngine>>({})
   const [busy, setBusy] = useState(false)
   const [error, setLocalError] = useState<string | null>(null)
   const timer = useRef<number | null>(null)
@@ -60,13 +51,11 @@ export default function ProjectView() {
   useEffect(() => {
     if (!status) return
     setAnalyzer((current) => status.defaults?.analyzer ?? current)
-    setImageEngine((current) => status.defaults?.image_engine ?? current)
   }, [status])
 
   useEffect(() => {
     if (!id) return
     setLoading(true)
-    setSceneEngines({})
     setLocalError(null)
     void refreshProject(id)
   }, [id, refreshProject])
@@ -143,30 +132,16 @@ export default function ProjectView() {
       characters={characters}
       status={status}
       analyzer={analyzer}
-      imageEngine={imageEngine}
-      sceneEngines={sceneEngines}
       busy={busy}
       error={error}
       onBack={() => navigate('/')}
       onAnalyzerChange={setAnalyzer}
-      onImageEngineChange={setImageEngine}
-      onSceneEngineChange={(sceneId, engine) =>
-        setSceneEngines((current) => ({ ...current, [sceneId]: engine }))
-      }
       onAnalyze={() => runAction(() => api.analyze(project.id, analyzer))}
       onDeepAnalyze={(sceneId) =>
         runAction(() => api.deepAnalyzeScene(project.id, sceneId, analyzer))
       }
       onGenerateVideoPrompt={(sceneId, model) =>
         runAction(() => api.generateVideoPrompt(project.id, sceneId, model, analyzer))
-      }
-      onGenerateAll={(target = 'first') =>
-        runAction(() => api.generateAll(project.id, imageEngine, target))
-      }
-      onGenerateScene={(sceneId, target = 'first') =>
-        runAction(() =>
-          api.generateScene(project.id, sceneId, sceneEngines[sceneId] ?? imageEngine, target),
-        )
       }
       onSavePrompt={(sceneId, patch) =>
         api.patchScene(project.id, sceneId, patch).then(setProject)

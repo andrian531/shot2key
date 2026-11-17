@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import type {
   Character,
-  ImageEngine,
   Scene,
   SceneCharacterMapping,
   VideoModelOption,
@@ -57,8 +56,6 @@ interface Props {
   characters: Character[]
   videoModels?: VideoModelOption[]
   analyzing?: boolean
-  engine: ImageEngine
-  onEngineChange: (engine: ImageEngine) => void
   onSavePrompt: (sceneId: string, patch: ScenePromptPatch) => Promise<void>
   onUpdateSceneCharacters: (
     sceneId: string,
@@ -69,21 +66,10 @@ interface Props {
   onApplyCharactersAll: (mappings: Record<string, SceneCharacterMapping>) => Promise<void>
   onDeepAnalyze: (sceneId: string) => void
   onGenerateVideoPrompt: (sceneId: string, model: string) => void
-  onGenerate: (sceneId: string, target?: 'first' | 'last' | 'both') => void
   keyframeUrl: string
   lastKeyframeUrl: string
-  imageUrl: string
-  lastImageUrl: string
   clipUrl: string
   clipDownloadUrl: string
-}
-
-const STATUS_STYLE: Record<Scene['image_status'], string> = {
-  idle: 'bg-ink-800 text-slate-300',
-  queued: 'bg-amber-950/60 text-amber-300',
-  generating: 'bg-amber-950/70 text-amber-200',
-  done: 'bg-emerald-950/60 text-emerald-300',
-  failed: 'bg-rose-950/60 text-rose-300',
 }
 
 function CopyButton({
@@ -133,28 +119,16 @@ export default function SceneCard({
   characters,
   videoModels,
   analyzing = false,
-  engine,
-  onEngineChange,
   onSavePrompt,
   onUpdateSceneCharacters,
   onDeepAnalyze,
   onGenerateVideoPrompt,
-  onGenerate,
   keyframeUrl,
   lastKeyframeUrl,
-  imageUrl,
-  lastImageUrl,
   clipUrl,
   clipDownloadUrl,
 }: Props) {
   const { t } = useApp()
-  const statusLabel: Record<Scene['image_status'], string> = {
-    idle: t.statusIdle,
-    queued: t.statusQueue,
-    generating: t.statusGenerating,
-    done: t.statusDone,
-    failed: t.statusFailed,
-  }
   const models = videoModels && videoModels.length > 0 ? videoModels : FALLBACK_VIDEO_MODELS
   const defaultVideoModel = models[0].id
   const initialVideoModel = scene.video_model ?? defaultVideoModel
@@ -165,7 +139,6 @@ export default function SceneCard({
     () => getVideoPromptEntry(scene, initialVideoModel, defaultVideoModel)?.prompt ?? '',
   )
   const [clipOpen, setClipOpen] = useState(false)
-  const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
 
   const currentVideoEntry = getVideoPromptEntry(scene, videoModel, defaultVideoModel)
@@ -184,21 +157,16 @@ export default function SceneCard({
 
   async function commit() {
     if (!dirty) return
-    setSaving(true)
-    try {
-      const patch: ScenePromptPatch = {
-        prompt,
-        last_prompt: lastPrompt,
-      }
-      if (videoPrompt !== currentRawVideoPrompt) {
-        patch.video_prompt = videoPrompt
-        patch.video_model = videoModel
-      }
-      await onSavePrompt(scene.id, patch)
-      setDirty(false)
-    } finally {
-      setSaving(false)
+    const patch: ScenePromptPatch = {
+      prompt,
+      last_prompt: lastPrompt,
     }
+    if (videoPrompt !== currentRawVideoPrompt) {
+      patch.video_prompt = videoPrompt
+      patch.video_model = videoModel
+    }
+    await onSavePrompt(scene.id, patch)
+    setDirty(false)
   }
 
   async function handleVideoModelChange(nextModel: string) {
@@ -231,11 +199,6 @@ export default function SceneCard({
     )
   }
 
-  const busyFirst = scene.image_status === 'queued' || scene.image_status === 'generating'
-  const busyLast = scene.last_image_status === 'queued' || scene.last_image_status === 'generating'
-  const busyAny = busyFirst || busyLast
-  const hasFirstGen = scene.image_status === 'done'
-  const hasLastGen = scene.last_image_status === 'done'
   const hasLastRef = Boolean(scene.last_keyframe)
   const deepBusy = Boolean(scene.deep_analyzing)
   const videoPromptBusy = Boolean(scene.video_prompt_generating)
@@ -285,14 +248,6 @@ export default function SceneCard({
           >
             {deepBusy ? t.deepAnalyzingBtn : t.deepAnalyzeBtn}
           </button>
-          <span className={`badge ${STATUS_STYLE[scene.image_status]}`}>
-            {t.firstBadgePrefix}: {statusLabel[scene.image_status]}
-          </span>
-          {scene.last_image_status && scene.last_image_status !== 'idle' && (
-            <span className={`badge ${STATUS_STYLE[scene.last_image_status]}`}>
-              {t.lastBadgePrefix}: {statusLabel[scene.last_image_status]}
-            </span>
-          )}
         </div>
       </div>
 
@@ -532,34 +487,13 @@ export default function SceneCard({
 
         {/* Row 1: Image Prompts (2 Columns: First + Last Keyframe) */}
         <section className="space-y-3 rounded-lg border border-ink-800 bg-ink-950/50 p-3.5">
-          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-ink-800/80 pb-2.5">
-            <div>
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-strong">
-                {t.imagePromptsTitle}
-              </h3>
-              <p className="mt-0.5 text-xs text-slate-400">
-                {t.imagePromptsDesc}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <select
-                className="input w-auto py-1 text-xs"
-                value={engine}
-                onChange={(event) => onEngineChange(event.target.value as ImageEngine)}
-                title={t.imageEngineLabel}
-              >
-                <option value="agy">agy</option>
-                <option value="codex">codex</option>
-              </select>
-              <button
-                type="button"
-                className="btn-primary py-1 text-xs"
-                disabled={!prompt.trim() || busyAny || saving}
-                onClick={() => onGenerate(scene.id, 'both')}
-              >
-                {busyAny ? t.generatingGeneric : t.generateBothBtn}
-              </button>
-            </div>
+          <div className="border-b border-ink-800/80 pb-2.5">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-strong">
+              {t.imagePromptsTitle}
+            </h3>
+            <p className="mt-0.5 text-xs text-slate-400">
+              {t.imagePromptsDesc}
+            </p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -583,49 +517,6 @@ export default function SceneCard({
                 }}
                 onBlur={commit}
               />
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  className="btn-ghost py-1.5 text-xs"
-                  disabled={!prompt.trim() || busyAny || saving}
-                  onClick={() => onGenerate(scene.id, 'first')}
-                >
-                  {busyFirst
-                    ? t.generatingFirstBtn
-                    : hasFirstGen
-                      ? t.regenerateFirstBtn
-                      : t.generateFirstBtn}
-                </button>
-              </div>
-              {scene.image_status !== 'idle' && (
-                <figure className="relative overflow-hidden rounded-lg border border-ink-800 bg-ink-950">
-                  {hasFirstGen ? (
-                    <>
-                      <img
-                        src={imageUrl}
-                        alt={`${t.resultFirstLabel} ${t.sceneTitle(sceneNum)}`}
-                        className="aspect-video w-full object-cover"
-                        loading="lazy"
-                      />
-                      <div className="flex items-center justify-between border-t border-ink-800 px-2.5 py-1.5 text-[11px]">
-                        <span className="font-medium text-amber-300">{t.resultFirstLabel}</span>
-                        <a
-                          href={imageUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-slate-300 hover:text-strong hover:underline"
-                        >
-                          {t.openFull}
-                        </a>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="grid aspect-video w-full place-items-center px-3 text-center text-xs text-slate-300">
-                      {busyFirst ? t.generatingFirstBtn : t.firstGenFailed}
-                    </div>
-                  )}
-                </figure>
-              )}
             </div>
 
             {/* 2. Last Keyframe Prompt */}
@@ -648,49 +539,6 @@ export default function SceneCard({
                 }}
                 onBlur={commit}
               />
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  className="btn-ghost py-1.5 text-xs"
-                  disabled={!(lastPrompt.trim() || prompt.trim()) || busyAny || saving}
-                  onClick={() => onGenerate(scene.id, 'last')}
-                >
-                  {busyLast
-                    ? t.generatingLastBtn
-                    : hasLastGen
-                      ? t.regenerateLastBtn
-                      : t.generateLastBtn}
-                </button>
-              </div>
-              {scene.last_image_status && scene.last_image_status !== 'idle' && (
-                <figure className="relative overflow-hidden rounded-lg border border-ink-800 bg-ink-950">
-                  {hasLastGen ? (
-                    <>
-                      <img
-                        src={lastImageUrl}
-                        alt={`${t.resultLastLabel} ${t.sceneTitle(sceneNum)}`}
-                        className="aspect-video w-full object-cover"
-                        loading="lazy"
-                      />
-                      <div className="flex items-center justify-between border-t border-ink-800 px-2.5 py-1.5 text-[11px]">
-                        <span className="font-medium text-amber-300">{t.resultLastLabel}</span>
-                        <a
-                          href={lastImageUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-slate-300 hover:text-strong hover:underline"
-                        >
-                          {t.openFull}
-                        </a>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="grid aspect-video w-full place-items-center px-3 text-center text-xs text-slate-300">
-                      {busyLast ? t.generatingLastBtn : t.lastGenFailed}
-                    </div>
-                  )}
-                </figure>
-              )}
             </div>
           </div>
         </section>
@@ -771,16 +619,6 @@ export default function SceneCard({
         {scene.analysis_error && (
           <p className="rounded border border-amber-900/60 bg-amber-950/40 px-2.5 py-1.5 text-xs text-amber-300">
             {t.analyzerLabel}: {scene.analysis_error}
-          </p>
-        )}
-        {scene.image_error && (
-          <p className="rounded border border-rose-900/60 bg-rose-950/40 px-2.5 py-1.5 text-xs text-rose-300">
-            {t.firstBadgePrefix}: {scene.image_error}
-          </p>
-        )}
-        {scene.last_image_error && (
-          <p className="rounded border border-rose-900/60 bg-rose-950/40 px-2.5 py-1.5 text-xs text-rose-300">
-            {t.lastBadgePrefix}: {scene.last_image_error}
           </p>
         )}
       </div>
