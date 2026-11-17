@@ -1,8 +1,16 @@
 # Shot2Key
 
-Local GUI studio that turns a reference video into a **scene-by-scene storyboard** (one scene per shot, each ≤ 10 s), analyzes frames & expressions, generates **First & Last Keyframe prompts/images**, and crafts **model-specific Video Motion Prompts** for Google Flow (`Omni 1.2 Flash`, `Veo 3.1 - Lite`), `Seedance 2.0`, `MiniMax`, and `Kling AI`.
+**Turn any reference video into scene-by-scene keyframe prompts and model-tuned motion prompts — running locally on the AI Pro and Codex subscriptions you already pay for.**
 
-**Built to leverage your existing AI subscriptions (`agy` & `codex` CLIs):** instead of requiring separate pay-per-call API billing, Shot2Key uses your logged-in **Google AI Pro (`agy` CLI)** and **ChatGPT / Codex (`codex` CLI)** accounts for **everything** — scene analysis, Deep Analyze (0.5 s), keyframe image generation, and model-specific video prompt crafting. *(API providers exist in the backend and are hidden in the UI until tested.)*
+Most video-breakdown workflows force you to wire up pay-as-you-go vision and image APIs before you can recreate a single shot. Shot2Key keeps everything on your machine: [`JuneYaooo/rea-video`](https://github.com/JuneYaooo/rea-video) handles shot detection, audio stem separation, and reference frames locally, while your logged-in **`agy` CLI** (Google AI Pro) and **`codex` CLI** (ChatGPT / Codex) handle scene analysis, 0.5-second expression breakdowns, and optional First/Last Keyframe generation.
+
+### Why Creators Use Shot2Key
+
+- **Use existing subscriptions, skip extra API bills:** Route frame analysis, prompt drafting, and image generation through `agy` and `codex` CLIs. *(Gemini and OpenAI-compatible APIs are wired in the backend and kept hidden in the UI until tested.)*
+- **Clean shot boundaries, capped for AI video tools:** Keeps a 3-second cut as a 3-second scene instead of merging unrelated camera angles. Only shots longer than your cap (`5 / 8 / 10 s`) are split evenly.
+- **Built for Google Flow, Seedance, MiniMax, and Kling:** Generates separate **First Keyframe** and **Last Keyframe** prompts alongside a dedicated **Video Motion Prompt** tailored to **Omni 1.2 Flash**, **Veo 3.1 - Lite**, **Seedance 2.0**, **MiniMax**, or **Kling AI** using rules from `rea-video`'s `prompting.yaml`.
+- **Swap only the characters you care about:** Prompts default to clean natural descriptions with zero raw placeholders. Enable **Replace Karakter** to pick which detected characters stay as `[Char_1]`, `[Char_2]` tags while leaving background extras natural.
+- **Inspect every clip and prompt before burning video credits:** Play any scene's exact cut lazily on demand (`ffmpeg` cuts only when you click Play), run **Deep Analyze (0.5 s)** for beat-by-beat facial expression and camera notes, and audit every prompt/response in **Logs**.
 
 Video decomposition and vendor prompting specifications are powered by [`JuneYaooo/rea-video`](https://github.com/JuneYaooo/rea-video) (**Apache-2.0**) — used as an installed dependency, not vendored code.
 
