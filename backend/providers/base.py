@@ -198,10 +198,14 @@ def _video_prompt_for_model(scene: dict[str, Any], context: dict[str, Any]) -> s
         lines.append("Deep Timeline (0.5s beats):")
         for beat in timeline:
             if isinstance(beat, dict):
-                lines.append(
-                    f"- {beat.get('time', '')}: action={beat.get('action', '')}; "
-                    f"expression={beat.get('expression', '')}; camera={beat.get('camera', '')}"
-                )
+                parts = [
+                    f"action={beat.get('action', '')}",
+                    f"expression={beat.get('expression', '')}",
+                    f"camera={beat.get('camera', '')}",
+                ]
+                if beat.get("background"):
+                    parts.append(f"background={beat.get('background', '')}")
+                lines.append(f"- {beat.get('time', '')}: {'; '.join(parts)}")
     images = scene_input_images(scene)
     if images:
         lines.append("")
@@ -214,6 +218,28 @@ def _video_prompt_for_model(scene: dict[str, Any], context: dict[str, Any]) -> s
             "MODEL-SPECIFIC PROMPTING RULES:",
             build_model_rules_text(model_id, duration),
         ]
+    if timeline:
+        lines.append(
+            "- A 0.5s Deep Timeline is provided above: incorporate its beat-by-beat actions, "
+            "expressions, gestures, camera motion, and background details into the prompt."
+        )
+    if scene.get("replace_characters"):
+        active = sorted(_active_replace_slots(scene))
+        if active:
+            tags = ", ".join(f"[{slot}]" for slot in active)
+            lines.append(
+                f"- Character tagging is ON for {tags}: refer to those selected characters by exact tag "
+                "([Char_N]), and describe any unselected/supporting people naturally without [Char_N] tags."
+            )
+        else:
+            lines.append(
+                "- No [Char_N] character slots are selected: describe people naturally without [Char_N] tags."
+            )
+    else:
+        lines.append(
+            "- Character tagging is OFF: describe every person naturally using their visual appearance. "
+            "Do NOT write [Char_1] or [Char_N] bracket tags."
+        )
     lines += [
         "",
         'Return ONLY a JSON object, no prose, no markdown fence: {"video_prompt": "..."}',

@@ -113,6 +113,7 @@ def build_prompts_json(project: dict[str, Any]) -> str:
                 "image_prompt": scene.get("prompt"),
                 "last_prompt": scene.get("last_prompt"),
                 "video_prompt": scene.get("video_prompt"),
+                "video_prompts": scene.get("video_prompts") or {},
                 "deep_timeline": scene.get("deep_timeline") or [],
                 "camera": scene.get("camera"),
                 "lighting": scene.get("lighting"),

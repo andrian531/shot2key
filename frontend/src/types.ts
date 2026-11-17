@@ -66,6 +66,14 @@ export interface DeepTimelineItem {
   background: string
 }
 
+export interface VideoPromptEntry {
+  prompt: string
+  replace_characters: boolean
+  replace_slots?: string[]
+  used_deep_timeline?: boolean
+  deep_version?: number
+}
+
 export interface Scene {
   id: string
   index: number
@@ -81,11 +89,13 @@ export interface Scene {
   last_prompt?: string
   video_prompt?: string
   video_model?: string
+  video_prompts?: Record<string, VideoPromptEntry>
   video_prompt_generating?: boolean
   camera: string
   lighting: string
   detected_characters?: DetectedCharacter[]
   deep_timeline?: DeepTimelineItem[]
+  deep_version?: number
   deep_analyzing?: boolean
   deep_progress?: { percent: number; message: string } | null
   replace_characters?: boolean

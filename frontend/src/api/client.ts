@@ -77,6 +77,7 @@ export const api = {
       prompt?: string
       last_prompt?: string
       video_prompt?: string
+      video_model?: string
       description?: string
       camera?: string
       lighting?: string

@@ -130,6 +130,8 @@ export interface UIStrings {
   generatePromptBtn: string
   generatingPromptProgress: string
   videoPromptPlaceholder: string
+  videoPromptCharStaleWarning: string
+  videoPromptDeepStaleWarning: string
   copyBtn: string
   copiedBtn: string
 
@@ -282,6 +284,10 @@ const id: UIStrings = {
   generatePromptBtn: 'Buat Prompt',
   generatingPromptProgress: 'Menyusun Prompt Gerakan Video sesuai aturan model terpilih...',
   videoPromptPlaceholder: 'Kosong secara bawaan — pilih model target lalu klik Buat Prompt.',
+  videoPromptCharStaleWarning:
+    'Prompt video ini dibuat saat Replace Karakter tidak aktif atau dengan pilihan karakter berbeda. Klik Buat Prompt untuk menyusun ulang dengan tag [Char_N] sesuai pilihan saat ini.',
+  videoPromptDeepStaleWarning:
+    'Data Analisis Mendalam (0,5 dtk) tersedia atau diperbarui setelah prompt ini dibuat. Klik Buat Prompt untuk memasukkan detail timeline terbaru.',
   copyBtn: 'Salin',
   copiedBtn: 'Tersalin',
 
@@ -433,6 +439,10 @@ const en: UIStrings = {
   generatePromptBtn: 'Generate Prompt',
   generatingPromptProgress: 'Crafting Video Motion Prompt for the selected model...',
   videoPromptPlaceholder: 'Empty by default — pick a target model and click Generate Prompt.',
+  videoPromptCharStaleWarning:
+    'This video prompt was generated with Replace Characters disabled or a different character selection. Click Generate Prompt to regenerate with current [Char_N] tags.',
+  videoPromptDeepStaleWarning:
+    'Deep Analyze (0.5s) data was added or updated after this prompt was generated. Click Generate Prompt to include the latest timeline details.',
   copyBtn: 'Copy',
   copiedBtn: 'Copied',
 

@@ -156,3 +156,125 @@ def test_partial_replace_slots_naturalizes_unchecked_char():
     assert "[Char_1]" in video
     assert "[Char_3]" not in video
     assert "male camera operator in black" in video
+
+
+def test_video_prompt_respects_replace_characters_and_deep_timeline_background():
+    base_scene = {
+        "id": "scene_001",
+        "index": 1,
+        "start_time": 0.0,
+        "end_time": 3.0,
+        "duration": 3.0,
+        "description": "Skater moves down the street.",
+        "detected_characters": [
+            {"slot": "Char_1", "description": "pink-haired skater"},
+            {"slot": "Char_2", "description": "camera operator"},
+        ],
+        "deep_timeline": [
+            {
+                "time": "0.5s",
+                "action": "pushes off",
+                "expression": "smiling",
+                "camera": "low tracking",
+                "background": "neon storefront",
+            }
+        ],
+        "replace_characters": False,
+    }
+    off_prompt = analyze_prompt(base_scene, {"video_prompt_only": True, "video_model": "omni_1_2"})
+    assert "Character tagging is OFF" in off_prompt
+    assert "background=neon storefront" in off_prompt
+    assert "0.5s Deep Timeline is provided above" in off_prompt
+
+    on_partial = {**base_scene, "replace_characters": True, "replace_slots": ["Char_1"]}
+    on_prompt = analyze_prompt(on_partial, {"video_prompt_only": True, "video_model": "omni_1_2"})
+    assert "Character tagging is ON for [Char_1]" in on_prompt
+
+
+def test_video_prompt_saved_per_model_with_metadata(client, monkeypatch, tmp_path: Path):
+    import asyncio
+    from core import jobs
+    from providers import registry
+    from providers.base import SceneAnalysis
+
+    class FakeAnalyzer:
+        name = "fake"
+
+        async def analyze(self, scene, context):
+            model = context.get("video_model")
+            return SceneAnalysis(
+                description="d",
+                prompt="p",
+                video_prompt=f"generated for {model}",
+                raw="{}",
+            )
+
+    monkeypatch.setattr(registry, "analyzer", lambda engine: FakeAnalyzer())
+
+    project = store.create("clip.mp4", str(tmp_path / "clip.mp4"), size_bytes=10)
+    store.mutate(
+        project["id"],
+        lambda p: p.update(
+            status="ready",
+            scenes=[
+                {
+                    "id": "scene_001",
+                    "index": 1,
+                    "start_time": 0.0,
+                    "end_time": 3.0,
+                    "duration": 3.0,
+                    "description": "d",
+                    "prompt": "p",
+                    "last_prompt": "",
+                    "video_prompt": "",
+                    "video_model": "omni_1_2",
+                    "video_prompts": {},
+                    "deep_timeline": [{"time": "0.0s", "action": "idle"}],
+                    "deep_version": 2,
+                    "detected_characters": [
+                        {"slot": "Char_1", "description": "skater"},
+                        {"slot": "Char_2", "description": "friend"},
+                    ],
+                    "replace_characters": False,
+                    "replace_slots": None,
+                }
+            ],
+        ),
+    )
+
+    # 1. Generate for omni_1_2 with replace_characters OFF
+    asyncio.run(jobs._run_video_prompt(project["id"], "scene_001", "omni_1_2", "agy"))
+    loaded = store.load(project["id"])["scenes"][0]
+    assert loaded["video_prompts"]["omni_1_2"] == {
+        "prompt": "generated for omni_1_2",
+        "replace_characters": False,
+        "replace_slots": [],
+        "used_deep_timeline": True,
+        "deep_version": 2,
+    }
+
+    # 2. Generate for seedance_2_0 with replace_characters ON (Char_1 only)
+    client.patch(
+        f"/api/projects/{project['id']}/scenes/scene_001",
+        json={"replace_characters": True, "replace_slots": ["Char_1"]},
+    )
+    asyncio.run(jobs._run_video_prompt(project["id"], "scene_001", "seedance_2_0", "agy"))
+    loaded = store.load(project["id"])["scenes"][0]
+    assert loaded["video_prompts"]["omni_1_2"]["replace_characters"] is False
+    assert loaded["video_prompts"]["seedance_2_0"] == {
+        "prompt": "generated for seedance_2_0",
+        "replace_characters": True,
+        "replace_slots": ["Char_1"],
+        "used_deep_timeline": True,
+        "deep_version": 2,
+    }
+
+    # 3. Manual PATCH keeps per-model prompts isolated
+    patch_resp = client.patch(
+        f"/api/projects/{project['id']}/scenes/scene_001",
+        json={"video_prompt": "edited seedance", "video_model": "seedance_2_0"},
+    )
+    assert patch_resp.status_code == 200
+    scene_after = patch_resp.json()["scenes"][0]
+    assert scene_after["video_prompts"]["seedance_2_0"]["prompt"] == "edited seedance"
+    assert scene_after["video_prompts"]["omni_1_2"]["prompt"] == "generated for omni_1_2"

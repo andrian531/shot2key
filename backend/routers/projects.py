@@ -35,6 +35,7 @@ class ScenePatch(BaseModel):
     prompt: str | None = None
     last_prompt: str | None = None
     video_prompt: str | None = None
+    video_model: str | None = None
     description: str | None = None
     camera: str | None = None
     lighting: str | None = None
@@ -175,8 +176,41 @@ def patch_scene(project_id: str, scene_id: str, body: ScenePatch) -> dict[str, A
 
     def apply(item: dict[str, Any]) -> None:
         scene = store.find_scene(item, scene_id)
-        if scene is not None:
-            scene.update(fields)
+        if scene is None:
+            return
+        scene.update(fields)
+        if "video_prompt" in fields:
+            from providers.base import _active_replace_slots
+            from providers.video_models import DEFAULT_VIDEO_MODEL
+
+            target_model = str(
+                fields.get("video_model") or scene.get("video_model") or DEFAULT_VIDEO_MODEL
+            )
+            prompts_map = dict(scene.get("video_prompts") or {})
+            existing_entry = dict(prompts_map.get(target_model) or {})
+            replace_chars = (
+                bool(existing_entry["replace_characters"])
+                if "replace_characters" in existing_entry
+                else bool(scene.get("replace_characters"))
+            )
+            replace_slots = (
+                list(existing_entry["replace_slots"])
+                if "replace_slots" in existing_entry
+                else (sorted(_active_replace_slots(scene)) if replace_chars else [])
+            )
+            prompts_map[target_model] = {
+                "prompt": str(fields["video_prompt"] or ""),
+                "replace_characters": replace_chars,
+                "replace_slots": replace_slots,
+                "used_deep_timeline": existing_entry.get(
+                    "used_deep_timeline", bool(scene.get("deep_timeline"))
+                ),
+                "deep_version": existing_entry.get(
+                    "deep_version", int(scene.get("deep_version") or 0)
+                ),
+            }
+            scene["video_prompts"] = prompts_map
+            scene["video_model"] = target_model
 
     return store.mutate(project_id, apply)
 

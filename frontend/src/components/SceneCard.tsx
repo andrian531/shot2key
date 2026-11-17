@@ -5,6 +5,7 @@ import type {
   Scene,
   SceneCharacterMapping,
   VideoModelOption,
+  VideoPromptEntry,
 } from '../types'
 import { formatTime } from '../lib/format'
 import { activeReplaceSlots, formatPromptForMode } from '../lib/prompts'
@@ -22,6 +23,32 @@ export interface ScenePromptPatch {
   prompt?: string
   last_prompt?: string
   video_prompt?: string
+  video_model?: string
+}
+
+function getVideoPromptEntry(
+  scene: Scene,
+  modelId: string,
+  defaultModelId: string,
+): VideoPromptEntry | null {
+  const map = scene.video_prompts
+  if (map && Object.prototype.hasOwnProperty.call(map, modelId)) {
+    return map[modelId]
+  }
+  // Legacy / initial fallback: treat single video_prompt as belonging only to scene.video_model (or default model).
+  const hasMapEntries = Boolean(map && Object.keys(map).length > 0)
+  const legacyOwner = scene.video_model || defaultModelId
+  if (!hasMapEntries && scene.video_prompt?.trim() && modelId === legacyOwner) {
+    const hasTags = /\[Char_\d+\]/.test(scene.video_prompt)
+    return {
+      prompt: scene.video_prompt,
+      replace_characters: hasTags || Boolean(scene.replace_characters),
+      replace_slots: hasTags ? activeReplaceSlots(scene) : [],
+      used_deep_timeline: Boolean(scene.deep_timeline?.length),
+      deep_version: scene.deep_version ?? 0,
+    }
+  }
+  return null
 }
 
 interface Props {
@@ -129,35 +156,60 @@ export default function SceneCard({
     failed: t.statusFailed,
   }
   const models = videoModels && videoModels.length > 0 ? videoModels : FALLBACK_VIDEO_MODELS
+  const defaultVideoModel = models[0].id
+  const initialVideoModel = scene.video_model ?? defaultVideoModel
   const [prompt, setPrompt] = useState(scene.prompt)
   const [lastPrompt, setLastPrompt] = useState(scene.last_prompt ?? '')
-  const [videoPrompt, setVideoPrompt] = useState(scene.video_prompt ?? '')
-  const [videoModel, setVideoModel] = useState(scene.video_model ?? models[0].id)
+  const [videoModel, setVideoModel] = useState(initialVideoModel)
+  const [videoPrompt, setVideoPrompt] = useState(
+    () => getVideoPromptEntry(scene, initialVideoModel, defaultVideoModel)?.prompt ?? '',
+  )
   const [clipOpen, setClipOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
 
+  const currentVideoEntry = getVideoPromptEntry(scene, videoModel, defaultVideoModel)
+  const currentRawVideoPrompt = currentVideoEntry?.prompt ?? ''
+
+  useEffect(() => {
+    if (scene.video_model) setVideoModel(scene.video_model)
+  }, [scene.video_model])
+
   useEffect(() => {
     setPrompt(scene.prompt)
     setLastPrompt(scene.last_prompt ?? '')
-    setVideoPrompt(scene.video_prompt ?? '')
-    if (scene.video_model) setVideoModel(scene.video_model)
+    setVideoPrompt(currentRawVideoPrompt)
     setDirty(false)
-  }, [scene.prompt, scene.last_prompt, scene.video_prompt, scene.video_model])
+  }, [scene.prompt, scene.last_prompt, currentRawVideoPrompt])
 
   async function commit() {
     if (!dirty) return
     setSaving(true)
     try {
-      await onSavePrompt(scene.id, {
+      const patch: ScenePromptPatch = {
         prompt,
         last_prompt: lastPrompt,
-        video_prompt: videoPrompt,
-      })
+      }
+      if (videoPrompt !== currentRawVideoPrompt) {
+        patch.video_prompt = videoPrompt
+        patch.video_model = videoModel
+      }
+      await onSavePrompt(scene.id, patch)
       setDirty(false)
     } finally {
       setSaving(false)
     }
+  }
+
+  async function handleVideoModelChange(nextModel: string) {
+    if (nextModel === videoModel) return
+    if (dirty) {
+      await commit()
+    }
+    setVideoModel(nextModel)
+    const nextEntry = getVideoPromptEntry(scene, nextModel, defaultVideoModel)
+    setVideoPrompt(nextEntry?.prompt ?? '')
+    setDirty(false)
   }
 
   const replaceEnabled = Boolean(scene.replace_characters)
@@ -189,6 +241,20 @@ export default function SceneCard({
   const videoPromptBusy = Boolean(scene.video_prompt_generating)
   const timeline = scene.deep_timeline ?? []
   const sceneNum = String(scene.index).padStart(2, '0')
+  const hasVideoPrompt = Boolean(currentRawVideoPrompt.trim())
+  const needsCharRegen = Boolean(
+    hasVideoPrompt &&
+      currentVideoEntry &&
+      replaceEnabled &&
+      (!currentVideoEntry.replace_characters ||
+        selectedSlots.some((slot) => !(currentVideoEntry.replace_slots ?? []).includes(slot))),
+  )
+  const needsDeepRegen = Boolean(
+    hasVideoPrompt &&
+      currentVideoEntry &&
+      ((scene.deep_version ?? 0) > (currentVideoEntry.deep_version ?? 0) ||
+        (timeline.length > 0 && currentVideoEntry.used_deep_timeline === false)),
+  )
 
   return (
     <article className="card flex flex-col overflow-hidden" data-project={projectId}>
@@ -644,7 +710,7 @@ export default function SceneCard({
               <select
                 className="input w-auto py-1 text-xs"
                 value={videoModel}
-                onChange={(event) => setVideoModel(event.target.value)}
+                onChange={(event) => void handleVideoModelChange(event.target.value)}
                 aria-label={t.videoPromptTitle}
               >
                 {models.map((item) => (
@@ -664,6 +730,18 @@ export default function SceneCard({
               <CopyButton text={displayVideoPrompt} label={t.videoPromptTitle} />
             </div>
           </div>
+
+          {needsCharRegen && (
+            <p className="rounded border border-amber-800/70 bg-amber-950/50 px-3 py-2 text-xs text-amber-200">
+              {t.videoPromptCharStaleWarning}
+            </p>
+          )}
+
+          {needsDeepRegen && (
+            <p className="rounded border border-amber-800/70 bg-amber-950/50 px-3 py-2 text-xs text-amber-200">
+              {t.videoPromptDeepStaleWarning}
+            </p>
+          )}
 
           {videoPromptBusy && (
             <div>

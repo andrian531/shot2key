@@ -149,11 +149,13 @@ def _build_scenes(
                 "last_prompt": "",
                 "video_prompt": "",
                 "video_model": DEFAULT_VIDEO_MODEL,
+                "video_prompts": {},
                 "video_prompt_generating": False,
                 "camera": "",
                 "lighting": "",
                 "detected_characters": [],
                 "deep_timeline": [],
+                "deep_version": 0,
                 "deep_analyzing": False,
                 "replace_characters": False,
                 "replace_slots": None,
@@ -472,9 +474,10 @@ async def _run_deep_analyze(project_id: str, scene_id: str, engine: str) -> None
         duration_ms=int((time.perf_counter() - started) * 1000),
         status="ok",
     )
-    store.mutate(
-        project_id,
-        lambda p, data=payload, eng=engine: _patch_scene(
+    def apply_deep(p: dict[str, Any], data: dict[str, Any] = payload, eng: str = engine) -> None:
+        current_scene = store.find_scene(p, scene_id) or {}
+        next_deep_version = int(current_scene.get("deep_version") or 0) + 1
+        _patch_scene(
             p,
             scene_id,
             description=data["description"],
@@ -484,12 +487,14 @@ async def _run_deep_analyze(project_id: str, scene_id: str, engine: str) -> None
             lighting=data["lighting"],
             detected_characters=data.get("characters") or [],
             deep_timeline=data.get("deep_timeline") or [],
+            deep_version=next_deep_version,
             deep_analyzing=False,
             deep_progress=None,
             engine=eng,
             analysis_error=None,
-        ),
-    )
+        )
+
+    store.mutate(project_id, apply_deep)
 
 
 def start_deep_analyze(project_id: str, scene_id: str, engine: str) -> None:
@@ -511,10 +516,16 @@ async def _run_video_prompt(
         ),
     )
 
+    from providers.base import _active_replace_slots
+
     analyzer = registry.analyzer(engine)
     context = _context(project, scene, None)
     context["video_prompt_only"] = True
     context["video_model"] = model_id
+    replace_chars = bool(scene.get("replace_characters"))
+    active_slots = sorted(_active_replace_slots(scene)) if replace_chars else []
+    used_deep = bool(scene.get("deep_timeline"))
+    deep_ver = int(scene.get("deep_version") or 0)
     images = [path for _, path in scene_input_images(scene)]
     started = time.perf_counter()
 
@@ -553,17 +564,30 @@ async def _run_video_prompt(
         duration_ms=int((time.perf_counter() - started) * 1000),
         status="ok",
     )
-    store.mutate(
-        project_id,
-        lambda p: _patch_scene(
+    generated_prompt = result.video_prompt or result.prompt
+    entry = {
+        "prompt": generated_prompt,
+        "replace_characters": replace_chars,
+        "replace_slots": active_slots,
+        "used_deep_timeline": used_deep,
+        "deep_version": deep_ver,
+    }
+
+    def apply_video_prompt(p: dict[str, Any]) -> None:
+        current_scene = store.find_scene(p, scene_id) or {}
+        prompts_map = dict(current_scene.get("video_prompts") or {})
+        prompts_map[model_id] = entry
+        _patch_scene(
             p,
             scene_id,
-            video_prompt=result.video_prompt or result.prompt,
+            video_prompt=generated_prompt,
             video_model=model_id,
+            video_prompts=prompts_map,
             video_prompt_generating=False,
             analysis_error=None,
-        ),
-    )
+        )
+
+    store.mutate(project_id, apply_video_prompt)
 
 
 def start_video_prompt(project_id: str, scene_id: str, model_id: str, engine: str) -> None:
