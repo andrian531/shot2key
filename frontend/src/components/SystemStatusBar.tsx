@@ -23,12 +23,12 @@ function Pill({ label, ok, title }: { label: string; ok: boolean; title?: string
 }
 
 const NAV = [
-  { to: '/', label: 'Library' },
-  { to: '/settings', label: 'Settings' },
+  { to: '/', key: 'navLibrary' as const },
+  { to: '/settings', key: 'navSettings' as const },
 ]
 
 export default function SystemStatusBar() {
-  const { status } = useApp()
+  const { status, lang, setLang, t } = useApp()
   const location = useLocation()
 
   const rea = status?.rea_video
@@ -48,11 +48,11 @@ export default function SystemStatusBar() {
           </div>
           <div className="leading-tight">
             <div className="text-sm font-semibold text-strong">Shot2Key</div>
-            <div className="text-[11px] text-slate-400">Cutroom &amp; keyframe studio</div>
+            <div className="text-[11px] text-slate-400">{t.appSubtitle}</div>
           </div>
         </Link>
 
-        <nav className="ml-2 flex items-center gap-1" aria-label="Navigasi utama">
+        <nav className="ml-2 flex items-center gap-1" aria-label={t.navAriaLabel}>
           {NAV.map((item) => {
             const active = item.to === '/' ? inLibrary : location.pathname === item.to
             return (
@@ -66,31 +66,55 @@ export default function SystemStatusBar() {
                 }`}
                 aria-current={active ? 'page' : undefined}
               >
-                {item.label}
+                {t[item.key]}
               </Link>
             )
           })}
         </nav>
 
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          <div
+            className="mr-1 inline-flex rounded-lg border border-ink-800 bg-ink-900 p-0.5 text-[11px]"
+            role="group"
+            aria-label={t.langSwitchAriaLabel}
+          >
+            <button
+              type="button"
+              onClick={() => setLang('id')}
+              className={`rounded px-2 py-0.5 font-medium transition-colors ${
+                lang === 'id' ? 'bg-amber-500 text-ink-950' : 'text-slate-400 hover:text-strong'
+              }`}
+            >
+              ID
+            </button>
+            <button
+              type="button"
+              onClick={() => setLang('en')}
+              className={`rounded px-2 py-0.5 font-medium transition-colors ${
+                lang === 'en' ? 'bg-amber-500 text-ink-950' : 'text-slate-400 hover:text-strong'
+              }`}
+            >
+              EN
+            </button>
+          </div>
           <Pill
             label={`rea-video${rea?.version ? ` ${rea.version}` : ''}`}
             ok={Boolean(rea?.available)}
-            title={rea?.command ?? 'rea-video tidak ditemukan di .venv'}
+            title={rea?.command ?? t.reaNotFound}
           />
           <Pill
             label={`ffmpeg${ffmpeg?.source ? ` (${ffmpeg.source})` : ''}`}
             ok={Boolean(ffmpeg?.available)}
-            title={ffmpeg?.path ?? 'ffmpeg tidak ditemukan'}
+            title={ffmpeg?.path ?? t.ffmpegNotFound}
           />
-          <Pill label="agy" ok={Boolean(agy?.available)} title={agy?.path ?? 'agy CLI tidak ditemukan'} />
+          <Pill label="agy" ok={Boolean(agy?.available)} title={agy?.path ?? t.agyNotFound} />
           <Pill
             label="codex"
             ok={Boolean(codex?.available)}
-            title={codex?.path ?? 'codex CLI tidak ditemukan'}
+            title={codex?.path ?? t.codexNotFound}
           />
           {status && !status.ready && (
-            <span className="badge bg-amber-950/60 text-amber-300">Dependensi belum lengkap</span>
+            <span className="badge bg-amber-950/60 text-amber-300">{t.depsIncomplete}</span>
           )}
         </div>
       </div>

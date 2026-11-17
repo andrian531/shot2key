@@ -10,6 +10,7 @@ import type {
 } from '../types'
 import { api } from '../api/client'
 import { formatBytes, formatTime } from '../lib/format'
+import { useApp } from '../state/AppContext'
 import SceneCard from './SceneCard'
 import type { ScenePromptPatch } from './SceneCard'
 
@@ -43,6 +44,7 @@ interface Props {
 }
 
 function AudioReportPanel({ project }: { project: Project }) {
+  const { t } = useApp()
   const stems = project.audio_stems ?? []
   if (stems.length === 0 && !project.report) return null
 
@@ -50,7 +52,7 @@ function AudioReportPanel({ project }: { project: Project }) {
     <div className="mt-3 rounded-lg border border-ink-800 bg-ink-950/60 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="mr-1 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
-          Audio &amp; Report
+          {t.audioReportTitle}
         </span>
         {stems.map((stem) => (
           <div
@@ -80,7 +82,7 @@ function AudioReportPanel({ project }: { project: Project }) {
             rel="noreferrer"
             className="btn-ghost py-1 text-[11px]"
           >
-            Buka report.html
+            {t.openReport}
           </a>
         )}
       </div>
@@ -89,6 +91,7 @@ function AudioReportPanel({ project }: { project: Project }) {
 }
 
 function LogsPanel({ projectId, onClose }: { projectId: string; onClose: () => void }) {
+  const { t } = useApp()
   const [logs, setLogs] = useState<PromptLogEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -116,20 +119,20 @@ function LogsPanel({ projectId, onClose }: { projectId: string; onClose: () => v
     <div className="mt-3 rounded-lg border border-ink-800 bg-ink-950/80">
       <div className="flex items-center justify-between border-b border-ink-800 px-3 py-2">
         <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-300">
-          Prompt &amp; Response Logs ({logs.length})
+          {t.logsTitle(logs.length)}
         </span>
         <button className="text-[11px] text-slate-400 hover:text-slate-200" onClick={onClose}>
-          Tutup
+          {t.closeBtn}
         </button>
       </div>
 
       {loading ? (
-        <p className="p-3 text-xs text-slate-400">Memuat log...</p>
+        <p className="p-3 text-xs text-slate-400">{t.loadingLogs}</p>
       ) : error ? (
         <p className="p-3 text-xs text-rose-300">{error}</p>
       ) : logs.length === 0 ? (
         <p className="p-3 text-xs text-slate-400">
-          Belum ada log. Jalankan Analyze atau Generate untuk merekam prompt &amp; respons.
+          {t.noLogs}
         </p>
       ) : (
         <div className="max-h-[420px] divide-y divide-ink-800/70 overflow-y-auto">
@@ -161,7 +164,7 @@ function LogsPanel({ projectId, onClose }: { projectId: string; onClose: () => v
                 )}
                 {entry.input_images.length > 0 && (
                   <div>
-                    <div className="label mb-1">input images</div>
+                    <div className="label mb-1">{t.inputImagesLabel}</div>
                     <ul className="space-y-0.5 font-mono text-[11px] text-slate-300">
                       {entry.input_images.map((image) => (
                         <li key={image} className="truncate" title={image}>
@@ -172,13 +175,13 @@ function LogsPanel({ projectId, onClose }: { projectId: string; onClose: () => v
                   </div>
                 )}
                 <div>
-                  <div className="label mb-1">prompt sent</div>
+                  <div className="label mb-1">{t.promptSentLabel}</div>
                   <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-ink-900 p-2 font-mono text-[11px] text-slate-200">
                     {entry.prompt_sent || '—'}
                   </pre>
                 </div>
                 <div>
-                  <div className="label mb-1">raw response</div>
+                  <div className="label mb-1">{t.rawResponseLabel}</div>
                   <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-ink-900 p-2 font-mono text-[11px] text-slate-200">
                     {entry.raw_response || '—'}
                   </pre>
@@ -233,6 +236,7 @@ export default function Storyboard({
   onApplyCharactersAll,
   onExport,
 }: Props) {
+  const { t } = useApp()
   const scenes = [...(project.scenes ?? [])].sort((a, b) => a.start_time - b.start_time)
   const [selectedId, setSelectedId] = useState<string | null>(scenes[0]?.id ?? null)
   const [logsOpen, setLogsOpen] = useState(false)
@@ -262,20 +266,20 @@ export default function Storyboard({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <button className="mb-1 text-xs text-slate-400 hover:text-slate-200" onClick={onBack}>
-              ← Semua project
+              {t.allProjects}
             </button>
             <h1 className="truncate text-lg font-semibold text-strong">{project.filename}</h1>
             <p className="mt-0.5 text-xs text-slate-400">
               {formatTime(project.source?.duration)} · {project.source?.width}×
               {project.source?.height} · {project.source?.fps} fps ·{' '}
-              {formatBytes(project.size_bytes)} · {project.shots.length} shot →{' '}
-              <span className="font-medium text-slate-200">{scenes.length} scene</span>
+              {formatBytes(project.size_bytes)} · {project.shots.length} {t.shotUnit} →{' '}
+              <span className="font-medium text-slate-200">{scenes.length} {t.sceneUnit}</span>
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-slate-400">Analyzer</span>
+              <span className="text-xs text-slate-400">{t.analyzerLabel}</span>
               <select
                 className="input w-auto py-1.5 text-xs"
                 value={analyzer}
@@ -287,7 +291,7 @@ export default function Storyboard({
                   .map((engine) => (
                     <option key={engine} value={engine}>
                       {engine}
-                      {status && !status.analyzers_ready?.[engine] ? ' (belum siap)' : ''}
+                      {status && !status.analyzers_ready?.[engine] ? ` (${t.notReady})` : ''}
                     </option>
                   ))}
               </select>
@@ -296,12 +300,12 @@ export default function Storyboard({
                 disabled={!ready || analyzing || busy}
                 onClick={onAnalyze}
               >
-                {analyzing ? 'Menganalisis...' : 'Analyze'}
+                {analyzing ? t.analyzingBtn : t.analyzeBtn}
               </button>
             </div>
 
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-slate-400">Image</span>
+              <span className="text-xs text-slate-400">{t.imageEngineLabel}</span>
               <select
                 className="input w-auto py-1.5 text-xs"
                 value={imageEngine}
@@ -315,20 +319,20 @@ export default function Storyboard({
                 disabled={!ready || generating || withPrompt === 0}
                 onClick={() => onGenerateAll('first')}
               >
-                {generating ? 'Generating...' : `Generate First All (${withPrompt})`}
+                {generating ? t.generatingAll : t.generateFirstAll(withPrompt)}
               </button>
             </div>
 
             <button
               className="btn-ghost py-1.5 text-xs"
               onClick={() => setLogsOpen((open) => !open)}
-              title="Lihat prompt yang dikirim dan respons mentah AI"
+              title={t.logsBtn}
             >
-              Logs
+              {t.logsBtn}
             </button>
 
             <button className="btn-ghost py-1.5 text-xs" disabled={!scenes.length} onClick={onExport}>
-              Export ZIP
+              {t.exportZip}
             </button>
           </div>
         </div>
@@ -345,9 +349,11 @@ export default function Storyboard({
           <div className="mt-3">
             <div className="mb-1 flex items-center justify-between text-[11px] text-amber-300">
               <span>
-                Menganalisis &amp; membuat prompt otomatis ({project.analysis?.done ?? 0}/
-                {project.analysis?.total ?? scenes.length} scene) dengan{' '}
-                {project.analysis?.engine ?? analyzer}...
+                {t.analyzingProgress(
+                  project.analysis?.done ?? 0,
+                  project.analysis?.total ?? scenes.length,
+                  project.analysis?.engine ?? analyzer,
+                )}
               </span>
               <span className="font-mono">
                 {Math.round(
@@ -380,9 +386,11 @@ export default function Storyboard({
           <div className="mt-3">
             <div className="mb-1 flex items-center justify-between text-[11px] text-emerald-300">
               <span>
-                Menggenerate keyframe ({project.generation?.done ?? 0}/
-                {project.generation?.queued ?? scenes.length}) dengan{' '}
-                {project.generation?.engine ?? imageEngine}...
+                {t.generatingProgress(
+                  project.generation?.done ?? 0,
+                  project.generation?.queued ?? scenes.length,
+                  project.generation?.engine ?? imageEngine,
+                )}
               </span>
               <span className="font-mono">
                 {Math.round(
@@ -413,7 +421,7 @@ export default function Storyboard({
 
         {project.status === 'failed' && (
           <p className="mt-3 rounded-lg border border-rose-900/60 bg-rose-950/40 px-3 py-2 text-xs text-rose-300">
-            Decompose gagal: {project.error}
+            {t.decomposeFailed(project.error ?? '')}
           </p>
         )}
 
@@ -426,10 +434,10 @@ export default function Storyboard({
         {ready && (
           <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-400">
             <span>
-              prompt: <span className="text-slate-200">{withPrompt}</span>/{scenes.length}
+              {t.promptCountLabel}: <span className="text-slate-200">{withPrompt}</span>/{scenes.length}
             </span>
             <span>
-              keyframe: <span className="text-slate-200">{withImage}</span>/{scenes.length}
+              {t.keyframeCountLabel}: <span className="text-slate-200">{withImage}</span>/{scenes.length}
             </span>
             {project.analysis?.status === 'running' && (
               <span className="text-amber-300">
@@ -437,7 +445,7 @@ export default function Storyboard({
               </span>
             )}
             {project.analysis?.status === 'partial' && (
-              <span className="text-amber-300">sebagian scene gagal dianalisis</span>
+              <span className="text-amber-300">{t.partialAnalyzeWarning}</span>
             )}
             {project.generation?.status === 'running' && (
               <span className="text-emerald-300">
@@ -446,10 +454,10 @@ export default function Storyboard({
             )}
             {project.generation?.status === 'partial' && (
               <span className="text-amber-300">
-                {project.generation.failed} keyframe gagal
+                {t.failedKeyframesWarning(project.generation.failed)}
               </span>
             )}
-            {project.subtitles?.srt && <span className="text-emerald-400">subtitle .srt tersedia</span>}
+            {project.subtitles?.srt && <span className="text-emerald-400">{t.subtitlesReady}</span>}
           </div>
         )}
       </div>
@@ -459,7 +467,7 @@ export default function Storyboard({
           {/* Sidebar: Timeline list of scenes by time */}
           <aside className="card w-full shrink-0 overflow-hidden lg:sticky lg:top-16 lg:w-80">
             <div className="border-b border-ink-800 px-3.5 py-2.5 text-xs font-semibold text-slate-200">
-              Timeline Scene ({scenes.length})
+              {t.timelineTitle(scenes.length)}
             </div>
             <div className="max-h-[72vh] divide-y divide-ink-800/70 overflow-y-auto">
               {scenes.map((scene) => {
@@ -495,7 +503,7 @@ export default function Storyboard({
                             selected ? 'text-amber-200' : 'text-slate-200'
                           }`}
                         >
-                          Scene {String(scene.index).padStart(2, '0')}
+                          {t.sceneTitle(String(scene.index).padStart(2, '0'))}
                         </span>
                         <span className="font-mono text-[11px] text-slate-400">
                           {scene.duration.toFixed(1)}s
@@ -515,21 +523,21 @@ export default function Storyboard({
                           }`}
                         >
                           {scene.deep_analyzing
-                            ? 'deep...'
+                            ? t.statusDeep
                             : hasPrompt
-                              ? 'prompt ✓'
+                              ? t.statusPromptOk
                               : analyzing
-                                ? 'antre...'
-                                : 'kosong'}
+                                ? t.statusQueued
+                                : t.statusEmpty}
                         </span>
                         {hasKeyframe && (
                           <span className="rounded bg-emerald-950/60 px-1.5 py-0.5 text-emerald-300">
-                            first ✓
+                            {t.statusFirstOk}
                           </span>
                         )}
                         {hasLastKeyframe && (
                           <span className="rounded bg-emerald-950/60 px-1.5 py-0.5 text-emerald-300">
-                            last ✓
+                            {t.statusLastOk}
                           </span>
                         )}
                       </div>
@@ -544,8 +552,7 @@ export default function Storyboard({
           <div className="min-w-0 flex-1 space-y-3">
             <div className="flex items-center justify-between text-xs text-slate-300">
               <span>
-                Menampilkan <strong className="text-strong">Scene {String(activeScene.index).padStart(2, '0')}</strong>{' '}
-                dari {scenes.length}
+                {t.showingScene(activeScene.index, scenes.length)}
               </span>
               <div className="flex items-center gap-2">
                 <button
@@ -554,7 +561,7 @@ export default function Storyboard({
                   disabled={selectedIndex <= 0}
                   onClick={() => setSelectedId(scenes[selectedIndex - 1]?.id ?? null)}
                 >
-                  ← Sebelumnya
+                  {t.prevScene}
                 </button>
                 <button
                   type="button"
@@ -562,7 +569,7 @@ export default function Storyboard({
                   disabled={selectedIndex < 0 || selectedIndex >= scenes.length - 1}
                   onClick={() => setSelectedId(scenes[selectedIndex + 1]?.id ?? null)}
                 >
-                  Berikutnya →
+                  {t.nextScene}
                 </button>
               </div>
             </div>

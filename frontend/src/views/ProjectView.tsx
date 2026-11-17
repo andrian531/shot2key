@@ -31,7 +31,7 @@ function needsPolling(project: Project | null): boolean {
 export default function ProjectView() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { status, characters } = useApp()
+  const { status, characters, t } = useApp()
 
   const [project, setProject] = useState<Project | null>(null)
   const [loading, setLoading] = useState(true)
@@ -113,12 +113,12 @@ export default function ProjectView() {
   if (notFound) {
     return (
       <div className="mx-auto max-w-3xl px-5 py-16 text-center">
-        <h1 className="text-lg font-semibold text-strong">Project tidak ditemukan</h1>
+        <h1 className="text-lg font-semibold text-strong">{t.projectNotFound}</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Project <code className="text-slate-400">{id}</code> sudah dihapus atau belum pernah ada.
+          <code className="text-slate-400">{id}</code> — {t.projectNotFoundDesc}
         </p>
         <Link to="/" className="btn-primary mt-5 inline-flex">
-          ← Kembali ke Library
+          {t.backToLibrary}
         </Link>
       </div>
     )

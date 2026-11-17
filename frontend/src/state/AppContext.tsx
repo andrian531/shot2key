@@ -1,12 +1,17 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../api/client'
+import { DEFAULT_LANG, TRANSLATIONS, readStoredLang, saveStoredLang } from '../i18n'
+import type { UILang, UIStrings } from '../i18n'
 import type { Character, SystemStatus } from '../types'
 
 interface AppState {
   status: SystemStatus | null
   characters: Character[]
   error: string | null
+  lang: UILang
+  t: UIStrings
+  setLang: (lang: UILang) => void
   setError: (message: string | null) => void
   refreshStatus: () => Promise<void>
   refreshCharacters: () => Promise<void>
@@ -22,6 +27,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<SystemStatus | null>(null)
   const [characters, setCharacters] = useState<Character[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [lang, setLangState] = useState<UILang>(() => readStoredLang() ?? DEFAULT_LANG)
+
+  const setLang = useCallback((next: UILang) => {
+    setLangState(next)
+    saveStoredLang(next)
+  }, [])
+
+  const t = TRANSLATIONS[lang]
+
+  useEffect(() => {
+    document.documentElement.lang = lang
+  }, [lang])
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -45,8 +62,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [refreshStatus, refreshCharacters])
 
   const value = useMemo(
-    () => ({ status, characters, error, setError, refreshStatus, refreshCharacters }),
-    [status, characters, error, refreshStatus, refreshCharacters],
+    () => ({ status, characters, error, lang, t, setLang, setError, refreshStatus, refreshCharacters }),
+    [status, characters, error, lang, t, setLang, refreshStatus, refreshCharacters],
   )
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>

@@ -5,14 +5,17 @@ import { useApp } from '../state/AppContext'
 
 /** `/settings` — API keys, default engines, auto-analyze and style prompt. */
 export default function SettingsView() {
-  const { refreshStatus } = useApp()
+  const { refreshStatus, t } = useApp()
   const [settings, setSettings] = useState<Settings | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
   useEffect(() => {
-    document.title = 'Settings · Shot2Key'
+    document.title = `${t.settingsTitle} · Shot2Key`
+  }, [t.settingsTitle])
+
+  useEffect(() => {
     api
       .getSettings()
       .then(setSettings)
@@ -45,7 +48,7 @@ export default function SettingsView() {
       })
       setSettings(saved)
       await refreshStatus()
-      setNotice('Settings tersimpan.')
+      setNotice(t.settingsSaved)
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -56,16 +59,16 @@ export default function SettingsView() {
   return (
     <div className="mx-auto max-w-3xl px-5 py-6">
       <div className="mb-4">
-        <h1 className="text-lg font-semibold text-strong">Settings</h1>
+        <h1 className="text-lg font-semibold text-strong">{t.settingsTitle}</h1>
         <p className="mt-0.5 text-[12px] text-slate-400">
-          Engine CLI default, durasi scene, dan perilaku otomatis. Disimpan lokal di{' '}
+          {t.settingsSubtitle}{' '}
           <code className="text-slate-300">backend/data/settings.json</code>.
         </p>
       </div>
 
       {!settings ? (
         <div className="card p-6 text-sm text-slate-400">
-          {error ? `Gagal memuat settings: ${error}` : 'Memuat...'}
+          {error ? t.loadSettingsFailed(error) : t.loadingText}
         </div>
       ) : (
         <div className="space-y-4">
@@ -118,10 +121,10 @@ export default function SettingsView() {
           </section> */}
 
           <section className="card space-y-4 p-5">
-            <h2 className="text-sm font-semibold text-strong">Engine Default</h2>
+            <h2 className="text-sm font-semibold text-strong">{t.engineSectionTitle}</h2>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="label">Analyzer default</label>
+                <label className="label">{t.defaultAnalyzerLabel}</label>
                 <select
                   className="input"
                   value={settings.default_analyzer}
@@ -138,7 +141,7 @@ export default function SettingsView() {
                 </select>
               </div>
               <div>
-                <label className="label">Image engine default</label>
+                <label className="label">{t.defaultImageEngineLabel}</label>
                 <select
                   className="input"
                   value={settings.default_image_engine}
@@ -157,22 +160,22 @@ export default function SettingsView() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="label">Max durasi scene (detik)</label>
+                <label className="label">{t.maxDurationLabel}</label>
                 <select
                   className="input"
                   value={String(settings.max_scene_seconds ?? 10)}
                   onChange={(event) => update('max_scene_seconds', Number(event.target.value))}
                 >
-                  <option value="5">5 detik</option>
-                  <option value="8">8 detik</option>
-                  <option value="10">10 detik</option>
+                  <option value="5">{t.secondsUnit(5)}</option>
+                  <option value="8">{t.secondsUnit(8)}</option>
+                  <option value="10">{t.secondsUnit(10)}</option>
                 </select>
                 <p className="mt-1 text-[11px] text-slate-500">
-                  Shot tidak pernah digabung; shot lebih panjang dari ini akan dipecah.
+                  {t.maxDurationHint}
                 </p>
               </div>
               <div>
-                <label className="label">Bahasa laporan rea-video</label>
+                <label className="label">{t.reaLangLabel}</label>
                 <select
                   className="input"
                   value={settings.rea_video_lang}
@@ -188,23 +191,23 @@ export default function SettingsView() {
                   checked={settings.rea_video_vlm}
                   onChange={(event) => update('rea_video_vlm', event.target.checked)}
                 />
-                Pakai VLM (butuh API key Gemini di env)
+                {t.useVlmLabel}
               </label>
             </div>
           </section>
 
           <section className="card space-y-3 p-5">
-            <h2 className="text-sm font-semibold text-strong">Otomatisasi &amp; Gaya</h2>
+            <h2 className="text-sm font-semibold text-strong">{t.automationSectionTitle}</h2>
             <label className="flex items-center gap-2 text-xs text-slate-300">
               <input
                 type="checkbox"
                 checked={Boolean(settings.auto_analyze)}
                 onChange={(event) => update('auto_analyze', event.target.checked)}
               />
-              Auto-Analyze &amp; buat prompt otomatis setelah video selesai dipecah
+              {t.autoAnalyzeLabel}
             </label>
             <div>
-              <label className="label">Default Style Prompt (otomatis ditambahkan saat generate)</label>
+              <label className="label">{t.defaultStyleLabel}</label>
               <textarea
                 className="input min-h-[80px] resize-y font-mono text-xs"
                 value={settings.default_style_prompt ?? ''}
@@ -226,7 +229,7 @@ export default function SettingsView() {
 
           <div className="flex justify-end gap-2">
             <button className="btn-primary" disabled={saving} onClick={save}>
-              {saving ? 'Menyimpan...' : 'Simpan Settings'}
+              {saving ? t.savingBtn : t.saveSettingsBtn}
             </button>
           </div>
         </div>

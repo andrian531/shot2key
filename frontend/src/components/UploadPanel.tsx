@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { useApp } from '../state/AppContext'
 import type { ProjectSummary } from '../types'
 import { formatTime } from '../lib/format'
 
@@ -21,6 +22,7 @@ export default function UploadPanel({
   onOpen,
   onDelete,
 }: Props) {
+  const { t } = useApp()
   const [dragging, setDragging] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -60,10 +62,9 @@ export default function UploadPanel({
           </svg>
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-strong">Drop video referensi</h2>
+          <h2 className="text-lg font-semibold text-strong">{t.dropVideoTitle}</h2>
           <p className="mt-1 text-sm text-slate-300">
-            .mp4 / .mov / .mkv — rea-video akan memecahnya per shot, lalu Shot2Key
-            memisahkan scene maksimal 10 detik.
+            {t.dropVideoDesc}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -72,7 +73,7 @@ export default function UploadPanel({
             disabled={uploading}
             onClick={() => inputRef.current?.click()}
           >
-            {uploading ? 'Mengunggah...' : 'Pilih file'}
+            {uploading ? t.uploading : t.chooseFile}
           </button>
           <input
             ref={inputRef}
@@ -90,9 +91,9 @@ export default function UploadPanel({
       </section>
 
       <section className="card p-5">
-        <h3 className="mb-3 text-sm font-semibold text-strong">Project terakhir</h3>
+        <h3 className="mb-3 text-sm font-semibold text-strong">{t.recentProjects}</h3>
         {projects.length === 0 ? (
-          <p className="text-sm text-slate-500">Belum ada project.</p>
+          <p className="text-sm text-slate-500">{t.noProjects}</p>
         ) : (
           <ul className="space-y-2">
             {projects.map((project) => (
@@ -103,7 +104,7 @@ export default function UploadPanel({
                 <button className="min-w-0 flex-1 text-left" onClick={() => onOpen(project.id)}>
                   <div className="truncate text-sm text-slate-200">{project.filename}</div>
                   <div className="text-[11px] text-slate-500">
-                    {project.scene_count} scene
+                    {project.scene_count} {t.sceneUnit}
                     {project.duration ? ` · ${formatTime(project.duration)}` : ''} ·{' '}
                     {project.status}
                   </div>
@@ -111,17 +112,16 @@ export default function UploadPanel({
                 <button
                   className="rounded px-2 py-1 text-[11px] text-slate-500 opacity-0 transition-opacity hover:text-rose-300 group-hover:opacity-100"
                   onClick={() => onDelete(project.id)}
-                  title="Hapus project"
+                  title={t.deleteProjectTitle}
                 >
-                  hapus
+                  {t.deleteLabel}
                 </button>
               </li>
             ))}
           </ul>
         )}
         <p className="mt-4 text-[11px] leading-relaxed text-slate-500">
-          Video disimpan lokal di <code className="text-slate-400">backend/uploads/</code>.
-          Tidak ada upload ke cloud kecuali kamu memilih engine API.
+          {t.localStorageNote}
         </p>
       </section>
     </div>

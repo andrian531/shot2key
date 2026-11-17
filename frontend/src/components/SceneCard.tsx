@@ -8,6 +8,7 @@ import type {
 } from '../types'
 import { formatTime } from '../lib/format'
 import { activeReplaceSlots, formatPromptForMode } from '../lib/prompts'
+import { useApp } from '../state/AppContext'
 
 const FALLBACK_VIDEO_MODELS: VideoModelOption[] = [
   { id: 'omni_1_2', label: 'Omni 1.2 Flash (Google Flow)', provider: 'Google Flow' },
@@ -58,23 +59,16 @@ const STATUS_STYLE: Record<Scene['image_status'], string> = {
   failed: 'bg-rose-950/60 text-rose-300',
 }
 
-const STATUS_LABEL: Record<Scene['image_status'], string> = {
-  idle: 'belum digenerate',
-  queued: 'dalam antrean',
-  generating: 'menggenerate...',
-  done: 'selesai',
-  failed: 'gagal',
-}
-
 function CopyButton({
   text,
   label,
-  caption = 'Copy',
+  caption,
 }: {
   text: string
   label: string
   caption?: string
 }) {
+  const { t } = useApp()
   const [copied, setCopied] = useState(false)
 
   async function copy() {
@@ -99,9 +93,9 @@ function CopyButton({
       className="rounded border border-ink-700 bg-ink-850 px-2.5 py-0.5 text-[11px] font-medium text-slate-200 hover:bg-ink-800 disabled:opacity-40"
       disabled={!text.trim()}
       onClick={copy}
-      title={`Copy ${label}`}
+      title={`${t.copyBtn} ${label}`}
     >
-      {copied ? 'Copied' : caption}
+      {copied ? t.copiedBtn : (caption ?? t.copyBtn)}
     </button>
   )
 }
@@ -126,6 +120,14 @@ export default function SceneCard({
   clipUrl,
   clipDownloadUrl,
 }: Props) {
+  const { t } = useApp()
+  const statusLabel: Record<Scene['image_status'], string> = {
+    idle: t.statusIdle,
+    queued: t.statusQueue,
+    generating: t.statusGenerating,
+    done: t.statusDone,
+    failed: t.statusFailed,
+  }
   const models = videoModels && videoModels.length > 0 ? videoModels : FALLBACK_VIDEO_MODELS
   const [prompt, setPrompt] = useState(scene.prompt)
   const [lastPrompt, setLastPrompt] = useState(scene.last_prompt ?? '')
@@ -186,6 +188,7 @@ export default function SceneCard({
   const deepBusy = Boolean(scene.deep_analyzing)
   const videoPromptBusy = Boolean(scene.video_prompt_generating)
   const timeline = scene.deep_timeline ?? []
+  const sceneNum = String(scene.index).padStart(2, '0')
 
   return (
     <article className="card flex flex-col overflow-hidden" data-project={projectId}>
@@ -193,15 +196,15 @@ export default function SceneCard({
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink-800 px-4 py-3">
         <div className="flex items-baseline gap-2.5">
           <span className="text-sm font-semibold text-strong">
-            Scene {String(scene.index).padStart(2, '0')}
+            {t.sceneTitle(sceneNum)}
           </span>
           <span className="font-mono text-xs text-slate-300">
             {formatTime(scene.start_time)} → {formatTime(scene.end_time)}
           </span>
           <span className="badge bg-ink-800 text-slate-200">{scene.duration.toFixed(2)}s</span>
           {scene.is_split && (
-            <span className="badge bg-ink-800 text-slate-300" title="Potongan dari shot panjang">
-              split
+            <span className="badge bg-ink-800 text-slate-300" title={t.splitBadgeTitle}>
+              {t.splitBadge}
             </span>
           )}
         </div>
@@ -212,16 +215,16 @@ export default function SceneCard({
             className="btn-ghost py-1 text-xs"
             disabled={deepBusy || analyzing}
             onClick={() => onDeepAnalyze(scene.id)}
-            title="Ekstrak frame per 0.5 detik untuk analisis ekspresi, gestur & prompt lebih detail"
+            title={t.deepAnalyzeTitle}
           >
-            {deepBusy ? 'Deep Analyzing (0.5s)...' : 'Deep Analyze (0.5s)'}
+            {deepBusy ? t.deepAnalyzingBtn : t.deepAnalyzeBtn}
           </button>
           <span className={`badge ${STATUS_STYLE[scene.image_status]}`}>
-            First: {STATUS_LABEL[scene.image_status]}
+            {t.firstBadgePrefix}: {statusLabel[scene.image_status]}
           </span>
           {scene.last_image_status && scene.last_image_status !== 'idle' && (
             <span className={`badge ${STATUS_STYLE[scene.last_image_status]}`}>
-              Last: {STATUS_LABEL[scene.last_image_status]}
+              {t.lastBadgePrefix}: {statusLabel[scene.last_image_status]}
             </span>
           )}
         </div>
@@ -232,8 +235,7 @@ export default function SceneCard({
         <div className="border-b border-ink-800 bg-ink-950/90 px-4 py-2.5">
           <div className="mb-1 flex items-center justify-between text-xs text-amber-300">
             <span>
-              {scene.deep_progress?.message ||
-                'Deep Analyze berjalan (ekstrak frame 0.5s & analisis detail)...'}
+              {scene.deep_progress?.message || t.deepAnalyzeDefaultMsg}
             </span>
             <span className="font-mono">{scene.deep_progress?.percent ?? 40}%</span>
           </div>
@@ -265,11 +267,11 @@ export default function SceneCard({
                 type="button"
                 onClick={() => setClipOpen(true)}
                 className="group relative block h-full w-full text-left"
-                title="Klik untuk memotong & memutar klip video asli scene ini"
+                title={t.playClipHint}
               >
                 <img
                   src={keyframeUrl}
-                  alt={`Poster klip scene ${scene.index}`}
+                  alt={t.clipTitle(sceneNum)}
                   className="h-full w-full object-cover opacity-80 transition-opacity group-hover:opacity-100"
                 />
                 <span className="absolute inset-0 grid place-items-center bg-black/30">
@@ -288,19 +290,17 @@ export default function SceneCard({
 
           <div className="min-w-0 flex-1 space-y-1">
             <div className="text-xs font-semibold text-strong">
-              Video Referensi Scene {String(scene.index).padStart(2, '0')}
+              {t.clipTitle(sceneNum)}
             </div>
             <p className="text-xs text-slate-300">
-              {clipOpen
-                ? 'Klip sedang diputar (loop). Jika baru pertama kali dibuka, ffmpeg memotong segmen ini otomatis.'
-                : 'Klik tombol Play pada player untuk memotong dan memutar klip asli scene ini tanpa memuat video penuh.'}
+              {clipOpen ? t.clipPlayingDesc : t.clipIdleDesc}
             </p>
             <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">
               <span className="font-mono text-slate-400">
                 {formatTime(scene.start_time)} → {formatTime(scene.end_time)}
               </span>
               <a href={clipDownloadUrl} className="font-medium text-amber-400 hover:underline">
-                Download MP4
+                {t.downloadMp4}
               </a>
               {clipOpen && (
                 <button
@@ -308,7 +308,7 @@ export default function SceneCard({
                   onClick={() => setClipOpen(false)}
                   className="text-slate-400 hover:text-slate-200"
                 >
-                  Tutup player
+                  {t.closePlayer}
                 </button>
               )}
             </div>
@@ -321,12 +321,12 @@ export default function SceneCard({
         <figure className="relative bg-ink-950">
           <img
             src={keyframeUrl}
-            alt={`Referensi first frame scene ${scene.index}`}
+            alt={`${t.refFirst} ${t.sceneTitle(sceneNum)}`}
             className="aspect-video w-full object-cover"
             loading="lazy"
           />
           <figcaption className="absolute bottom-2 left-2 rounded bg-black/80 px-2 py-0.5 text-[11px] font-medium text-slate-200">
-            Referensi First
+            {t.refFirst}
           </figcaption>
         </figure>
 
@@ -334,17 +334,17 @@ export default function SceneCard({
           {hasLastRef ? (
             <img
               src={lastKeyframeUrl}
-              alt={`Referensi last frame scene ${scene.index}`}
+              alt={`${t.refLast} ${t.sceneTitle(sceneNum)}`}
               className="aspect-video w-full object-cover"
               loading="lazy"
             />
           ) : (
             <div className="grid aspect-video w-full place-items-center text-xs text-slate-400">
-              tidak ada last frame
+              {t.noLastRef}
             </div>
           )}
           <figcaption className="absolute bottom-2 left-2 rounded bg-black/80 px-2 py-0.5 text-[11px] font-medium text-slate-200">
-            Referensi Last
+            {t.refLast}
           </figcaption>
         </figure>
       </div>
@@ -364,12 +364,12 @@ export default function SceneCard({
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-300">
                 {scene.camera && (
                   <span>
-                    <strong className="text-slate-400">Kamera:</strong> {scene.camera}
+                    <strong className="text-slate-400">{t.cameraLabel}</strong> {scene.camera}
                   </span>
                 )}
                 {scene.lighting && (
                   <span>
-                    <strong className="text-slate-400">Cahaya:</strong> {scene.lighting}
+                    <strong className="text-slate-400">{t.lightingLabel}</strong> {scene.lighting}
                   </span>
                 )}
               </div>
@@ -381,20 +381,20 @@ export default function SceneCard({
         {timeline.length > 0 && (
           <details className="rounded-lg border border-ink-800 bg-ink-950/70">
             <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-amber-300">
-              Timeline Detail per 0.5s ({timeline.length} beat)
+              {t.timelineDetailTitle(timeline.length)}
             </summary>
             <div className="divide-y divide-ink-800/70 border-t border-ink-800 px-3 py-1">
               {timeline.map((beat, idx) => (
                 <div key={`${beat.time}-${idx}`} className="grid gap-1 py-2 text-xs md:grid-cols-[64px_1fr]">
                   <span className="font-mono text-amber-300">{beat.time}</span>
                   <div className="space-y-0.5 text-slate-200">
-                    {beat.action && <div>Aksi: {beat.action}</div>}
-                    {beat.expression && <div className="text-slate-300">Ekspresi: {beat.expression}</div>}
+                    {beat.action && <div>{t.actionLabel} {beat.action}</div>}
+                    {beat.expression && <div className="text-slate-300">{t.expressionLabel} {beat.expression}</div>}
                     {(beat.camera || beat.background) && (
                       <div className="text-slate-400">
-                        {beat.camera ? `Kamera: ${beat.camera}` : ''}
+                        {beat.camera ? `${t.cameraLabel} ${beat.camera}` : ''}
                         {beat.camera && beat.background ? ' · ' : ''}
-                        {beat.background ? `Latar: ${beat.background}` : ''}
+                        {beat.background ? `${t.backgroundLabel} ${beat.background}` : ''}
                       </div>
                     )}
                   </div>
@@ -419,12 +419,12 @@ export default function SceneCard({
                 )
               }
             />
-            Replace Karakter (pilih karakter mana yang masuk prompt sebagai tag [Char_N])
+            {t.replaceCharLabel}
             {detected.length > 0 && (
               <span className="badge bg-ink-800 text-[11px] text-slate-300">
                 {replaceEnabled
-                  ? `${selectedSlots.length}/${detected.length} dipilih`
-                  : `${detected.length} terdeteksi`}
+                  ? t.replaceSelectedCount(selectedSlots.length, detected.length)
+                  : t.replaceDetectedCount(detected.length)}
               </span>
             )}
           </label>
@@ -452,7 +452,7 @@ export default function SceneCard({
                         {char.description}
                         {!slotChecked && (
                           <span className="ml-1.5 text-[11px] text-slate-400">
-                            (karakter sampingan — pakai deskripsi asli)
+                            {t.supportingCharNote}
                           </span>
                         )}
                       </span>
@@ -469,11 +469,10 @@ export default function SceneCard({
           <div className="flex flex-wrap items-start justify-between gap-3 border-b border-ink-800/80 pb-2.5">
             <div>
               <h3 className="text-xs font-semibold uppercase tracking-wider text-strong">
-                Image Prompts (First &amp; Last Keyframe)
+                {t.imagePromptsTitle}
               </h3>
               <p className="mt-0.5 text-xs text-slate-400">
-                Opsional: generate gambar keyframe baru langsung di sini (agy / codex), atau copy
-                prompt-nya untuk di-generate di penyedia lain seperti ChatGPT / Midjourney / Nano Banana.
+                {t.imagePromptsDesc}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -481,7 +480,7 @@ export default function SceneCard({
                 className="input w-auto py-1 text-xs"
                 value={engine}
                 onChange={(event) => onEngineChange(event.target.value as ImageEngine)}
-                title="Image Engine untuk generate langsung di sini"
+                title={t.imageEngineLabel}
               >
                 <option value="agy">agy</option>
                 <option value="codex">codex</option>
@@ -492,7 +491,7 @@ export default function SceneCard({
                 disabled={!prompt.trim() || busyAny || saving}
                 onClick={() => onGenerate(scene.id, 'both')}
               >
-                {busyAny ? 'Generating...' : 'Generate Both (First + Last)'}
+                {busyAny ? t.generatingGeneric : t.generateBothBtn}
               </button>
             </div>
           </div>
@@ -501,16 +500,16 @@ export default function SceneCard({
             {/* 1. First Keyframe Prompt */}
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between gap-2">
-                <label className="label mb-0">1. First Keyframe Prompt</label>
-                <CopyButton text={displayFirstPrompt} label="first keyframe prompt" />
+                <label className="label mb-0">{t.firstPromptLabel}</label>
+                <CopyButton text={displayFirstPrompt} label={t.firstPromptLabel} />
               </div>
               <textarea
                 className="input min-h-[120px] flex-1 resize-y font-mono text-xs leading-relaxed"
                 value={dirty ? prompt : displayFirstPrompt}
                 placeholder={
                   analyzing || deepBusy
-                    ? 'Sedang menganalisis...'
-                    : 'Prompt untuk gambar First Frame...'
+                    ? t.analyzingPlaceholder
+                    : t.firstPromptPlaceholder
                 }
                 onChange={(event) => {
                   setPrompt(event.target.value)
@@ -526,10 +525,10 @@ export default function SceneCard({
                   onClick={() => onGenerate(scene.id, 'first')}
                 >
                   {busyFirst
-                    ? 'Generating First...'
+                    ? t.generatingFirstBtn
                     : hasFirstGen
-                      ? 'Regenerate First'
-                      : 'Generate First'}
+                      ? t.regenerateFirstBtn
+                      : t.generateFirstBtn}
                 </button>
               </div>
               {scene.image_status !== 'idle' && (
@@ -538,25 +537,25 @@ export default function SceneCard({
                     <>
                       <img
                         src={imageUrl}
-                        alt={`Generated first keyframe scene ${scene.index}`}
+                        alt={`${t.resultFirstLabel} ${t.sceneTitle(sceneNum)}`}
                         className="aspect-video w-full object-cover"
                         loading="lazy"
                       />
                       <div className="flex items-center justify-between border-t border-ink-800 px-2.5 py-1.5 text-[11px]">
-                        <span className="font-medium text-amber-300">Hasil Keyframe First</span>
+                        <span className="font-medium text-amber-300">{t.resultFirstLabel}</span>
                         <a
                           href={imageUrl}
                           target="_blank"
                           rel="noreferrer"
                           className="text-slate-300 hover:text-strong hover:underline"
                         >
-                          Buka penuh
+                          {t.openFull}
                         </a>
                       </div>
                     </>
                   ) : (
                     <div className="grid aspect-video w-full place-items-center px-3 text-center text-xs text-slate-300">
-                      {busyFirst ? 'Menggenerate First Keyframe...' : 'Generate First Keyframe gagal'}
+                      {busyFirst ? t.generatingFirstBtn : t.firstGenFailed}
                     </div>
                   )}
                 </figure>
@@ -566,16 +565,16 @@ export default function SceneCard({
             {/* 2. Last Keyframe Prompt */}
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between gap-2">
-                <label className="label mb-0">2. Last Keyframe Prompt</label>
-                <CopyButton text={displayLastPrompt} label="last keyframe prompt" />
+                <label className="label mb-0">{t.lastPromptLabel}</label>
+                <CopyButton text={displayLastPrompt} label={t.lastPromptLabel} />
               </div>
               <textarea
                 className="input min-h-[120px] flex-1 resize-y font-mono text-xs leading-relaxed"
                 value={dirty ? lastPrompt : displayLastPrompt}
                 placeholder={
                   analyzing || deepBusy
-                    ? 'Sedang menganalisis...'
-                    : 'Prompt untuk gambar Last Frame...'
+                    ? t.analyzingPlaceholder
+                    : t.lastPromptPlaceholder
                 }
                 onChange={(event) => {
                   setLastPrompt(event.target.value)
@@ -591,10 +590,10 @@ export default function SceneCard({
                   onClick={() => onGenerate(scene.id, 'last')}
                 >
                   {busyLast
-                    ? 'Generating Last...'
+                    ? t.generatingLastBtn
                     : hasLastGen
-                      ? 'Regenerate Last'
-                      : 'Generate Last'}
+                      ? t.regenerateLastBtn
+                      : t.generateLastBtn}
                 </button>
               </div>
               {scene.last_image_status && scene.last_image_status !== 'idle' && (
@@ -603,25 +602,25 @@ export default function SceneCard({
                     <>
                       <img
                         src={lastImageUrl}
-                        alt={`Generated last keyframe scene ${scene.index}`}
+                        alt={`${t.resultLastLabel} ${t.sceneTitle(sceneNum)}`}
                         className="aspect-video w-full object-cover"
                         loading="lazy"
                       />
                       <div className="flex items-center justify-between border-t border-ink-800 px-2.5 py-1.5 text-[11px]">
-                        <span className="font-medium text-amber-300">Hasil Keyframe Last</span>
+                        <span className="font-medium text-amber-300">{t.resultLastLabel}</span>
                         <a
                           href={lastImageUrl}
                           target="_blank"
                           rel="noreferrer"
                           className="text-slate-300 hover:text-strong hover:underline"
                         >
-                          Buka penuh
+                          {t.openFull}
                         </a>
                       </div>
                     </>
                   ) : (
                     <div className="grid aspect-video w-full place-items-center px-3 text-center text-xs text-slate-300">
-                      {busyLast ? 'Menggenerate Last Keyframe...' : 'Generate Last Keyframe gagal'}
+                      {busyLast ? t.generatingLastBtn : t.lastGenFailed}
                     </div>
                   )}
                 </figure>
@@ -635,10 +634,10 @@ export default function SceneCard({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h3 className="text-xs font-semibold uppercase tracking-wider text-amber-300">
-                Video Motion Prompt (Untuk Generator Video AI)
+                {t.videoPromptTitle}
               </h3>
               <p className="mt-0.5 text-xs text-slate-400">
-                Copy prompt ini ke Google Flow (Omni 1.2 / Veo 3.1 Lite), Seedance, MiniMax, atau Kling bersama First/Last Frame.
+                {t.videoPromptDesc}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -646,7 +645,7 @@ export default function SceneCard({
                 className="input w-auto py-1 text-xs"
                 value={videoModel}
                 onChange={(event) => setVideoModel(event.target.value)}
-                title="Target generator video AI"
+                aria-label={t.videoPromptTitle}
               >
                 {models.map((item) => (
                   <option key={item.id} value={item.id}>
@@ -659,19 +658,18 @@ export default function SceneCard({
                 className="btn-ghost py-1 text-xs"
                 disabled={videoPromptBusy || analyzing || deepBusy}
                 onClick={() => onGenerateVideoPrompt(scene.id, videoModel)}
-                title="Susun ulang video prompt dari data scene sesuai aturan model terpilih"
               >
-                {videoPromptBusy ? 'Generating...' : 'Generate Prompt'}
+                {videoPromptBusy ? t.generatingGeneric : t.generatePromptBtn}
               </button>
-              <CopyButton text={displayVideoPrompt} label="video prompt" />
+              <CopyButton text={displayVideoPrompt} label={t.videoPromptTitle} />
             </div>
           </div>
 
           {videoPromptBusy && (
             <div>
               <div className="mb-1 flex items-center justify-between text-[11px] text-amber-300">
-                <span>Menyusun Video Motion Prompt sesuai aturan model terpilih...</span>
-                <span className="font-mono">proses</span>
+                <span>{t.generatingPromptProgress}</span>
+                <span className="font-mono">...</span>
               </div>
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-ink-800">
                 <div className="h-full w-2/3 animate-pulse rounded-full bg-amber-500" />
@@ -682,7 +680,7 @@ export default function SceneCard({
           <textarea
             className="input min-h-[104px] w-full resize-y font-mono text-xs leading-relaxed"
             value={dirty ? videoPrompt : displayVideoPrompt}
-            placeholder="Kosong secara default — pilih target model lalu klik Generate Prompt."
+            placeholder={t.videoPromptPlaceholder}
             onChange={(event) => {
               setVideoPrompt(event.target.value)
               setDirty(true)
@@ -694,17 +692,17 @@ export default function SceneCard({
         {/* Errors */}
         {scene.analysis_error && (
           <p className="rounded border border-amber-900/60 bg-amber-950/40 px-2.5 py-1.5 text-xs text-amber-300">
-            Analyze: {scene.analysis_error}
+            {t.analyzerLabel}: {scene.analysis_error}
           </p>
         )}
         {scene.image_error && (
           <p className="rounded border border-rose-900/60 bg-rose-950/40 px-2.5 py-1.5 text-xs text-rose-300">
-            First Keyframe: {scene.image_error}
+            {t.firstBadgePrefix}: {scene.image_error}
           </p>
         )}
         {scene.last_image_error && (
           <p className="rounded border border-rose-900/60 bg-rose-950/40 px-2.5 py-1.5 text-xs text-rose-300">
-            Last Keyframe: {scene.last_image_error}
+            {t.lastBadgePrefix}: {scene.last_image_error}
           </p>
         )}
       </div>

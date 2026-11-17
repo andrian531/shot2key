@@ -8,7 +8,7 @@ import { useApp } from '../state/AppContext'
 /** `/` — every project plus the upload panel. */
 export default function LibraryView() {
   const navigate = useNavigate()
-  const { setError } = useApp()
+  const { setError, t } = useApp()
   const [projects, setProjects] = useState<ProjectSummary[]>([])
   const [uploading, setUploading] = useState(false)
   const [error, setLocalError] = useState<string | null>(null)
@@ -22,7 +22,10 @@ export default function LibraryView() {
   }, [])
 
   useEffect(() => {
-    document.title = 'Library · Shot2Key'
+    document.title = `${t.libraryTitle} · Shot2Key`
+  }, [t.libraryTitle])
+
+  useEffect(() => {
     void refreshProjects()
   }, [refreshProjects])
 
@@ -41,7 +44,7 @@ export default function LibraryView() {
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm('Hapus project ini beserta videonya?')) return
+    if (!window.confirm(t.deleteProjectConfirm)) return
     try {
       await api.deleteProject(id)
       await refreshProjects()
@@ -53,9 +56,9 @@ export default function LibraryView() {
   return (
     <div>
       <div className="mx-auto max-w-[1600px] px-5 pt-6">
-        <h1 className="text-lg font-semibold text-strong">Library</h1>
+        <h1 className="text-lg font-semibold text-strong">{t.libraryTitle}</h1>
         <p className="mt-0.5 text-[12px] text-slate-500">
-          Upload video referensi, lalu buka project untuk mengatur storyboard dan keyframe.
+          {t.librarySubtitle}
         </p>
       </div>
       <UploadPanel
