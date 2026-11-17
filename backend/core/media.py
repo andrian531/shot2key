@@ -191,6 +191,60 @@ def extract_interval_frames(
     return results
 
 
+def cut_scene_clip(
+    video: str | Path,
+    start_seconds: float,
+    end_seconds: float,
+    out_path: str | Path,
+) -> Path | None:
+    """Cut a frame-accurate MP4 clip for ``[start_seconds, end_seconds]`` on demand."""
+    exe = ffmpeg_path()
+    if not exe:
+        return None
+    start = max(0.0, float(start_seconds))
+    duration = max(0.25, float(end_seconds) - start)
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = out_path.with_suffix(".tmp.mp4")
+
+    cmd = [
+        exe,
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-ss",
+        f"{start:.3f}",
+        "-i",
+        str(video),
+        "-t",
+        f"{duration:.3f}",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "23",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-movflags",
+        "+faststart",
+        "-y",
+        str(tmp_path),
+    ]
+    try:
+        proc = run(cmd, timeout=120)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        return None
+    if proc.returncode != 0 or not tmp_path.is_file() or tmp_path.stat().st_size == 0:
+        tmp_path.unlink(missing_ok=True)
+        return None
+    os.replace(tmp_path, out_path)
+    return out_path
+
+
 def python_exe() -> str:
     """The interpreter running the backend (children must match the venv)."""
     return sys.executable

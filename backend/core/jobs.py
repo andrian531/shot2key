@@ -20,6 +20,7 @@ from core import settings as settings_store
 from core.scene_splitter import Scene, split_scenes
 from providers import registry
 from providers.base import ProviderError, analyze_prompt, scene_input_images
+from providers.video_models import DEFAULT_VIDEO_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +148,8 @@ def _build_scenes(
                 "prompt": "",
                 "last_prompt": "",
                 "video_prompt": "",
+                "video_model": DEFAULT_VIDEO_MODEL,
+                "video_prompt_generating": False,
                 "camera": "",
                 "lighting": "",
                 "detected_characters": [],
@@ -470,6 +473,83 @@ async def _run_deep_analyze(project_id: str, scene_id: str, engine: str) -> None
 
 def start_deep_analyze(project_id: str, scene_id: str, engine: str) -> None:
     _spawn(f"{project_id}:deep:{scene_id}", _run_deep_analyze(project_id, scene_id, engine))
+
+
+async def _run_video_prompt(
+    project_id: str, scene_id: str, model_id: str, engine: str
+) -> None:
+    project = store.load(project_id)
+    scene = store.find_scene(project, scene_id)
+    if scene is None:
+        return
+
+    store.mutate(
+        project_id,
+        lambda p: _patch_scene(
+            p, scene_id, video_prompt_generating=True, video_model=model_id, analysis_error=None
+        ),
+    )
+
+    analyzer = registry.analyzer(engine)
+    context = _context(project, scene, None)
+    context["video_prompt_only"] = True
+    context["video_model"] = model_id
+    images = [path for _, path in scene_input_images(scene)]
+    started = time.perf_counter()
+
+    try:
+        result = await analyzer.analyze(scene, context)
+    except (ProviderError, Exception) as exc:  # noqa: BLE001
+        prompt_logger.log_event(
+            project_id,
+            scene_id,
+            f"video_prompt:{model_id}",
+            engine,
+            prompt_sent=analyze_prompt(scene, context),
+            raw_response="",
+            input_images=images,
+            duration_ms=int((time.perf_counter() - started) * 1000),
+            status="error",
+            error=str(exc)[:2000],
+        )
+        store.mutate(
+            project_id,
+            lambda p, msg=str(exc): _patch_scene(
+                p, scene_id, video_prompt_generating=False, analysis_error=msg[:500]
+            ),
+        )
+        return
+
+    prompt_logger.log_event(
+        project_id,
+        scene_id,
+        f"video_prompt:{model_id}",
+        engine,
+        prompt_sent=result.prompt_sent or analyze_prompt(scene, context),
+        raw_response=result.raw,
+        input_images=images,
+        parsed={"video_model": model_id, "video_prompt": result.video_prompt},
+        duration_ms=int((time.perf_counter() - started) * 1000),
+        status="ok",
+    )
+    store.mutate(
+        project_id,
+        lambda p: _patch_scene(
+            p,
+            scene_id,
+            video_prompt=result.video_prompt or result.prompt,
+            video_model=model_id,
+            video_prompt_generating=False,
+            analysis_error=None,
+        ),
+    )
+
+
+def start_video_prompt(project_id: str, scene_id: str, model_id: str, engine: str) -> None:
+    _spawn(
+        f"{project_id}:vprompt:{scene_id}",
+        _run_video_prompt(project_id, scene_id, model_id, engine),
+    )
 
 
 # --------------------------------------------------------------------------

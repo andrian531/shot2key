@@ -9,6 +9,12 @@ export interface DependencyStatus {
   source?: string
 }
 
+export interface VideoModelOption {
+  id: string
+  label: string
+  provider: string
+}
+
 export interface SystemStatus {
   ready: boolean
   rea_video: DependencyStatus
@@ -18,6 +24,7 @@ export interface SystemStatus {
   api_keys: Record<string, boolean>
   analyzers_ready: Record<string, boolean>
   engines: { analyzers: Engine[]; image_engines: ImageEngine[] }
+  video_models?: VideoModelOption[]
   defaults: { analyzer: Engine; image_engine: ImageEngine }
   max_scene_seconds: number
   python: string
@@ -73,6 +80,8 @@ export interface Scene {
   prompt: string
   last_prompt?: string
   video_prompt?: string
+  video_model?: string
+  video_prompt_generating?: boolean
   camera: string
   lighting: string
   detected_characters?: DetectedCharacter[]

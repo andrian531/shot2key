@@ -57,19 +57,21 @@ export default function SettingsView() {
     <div className="mx-auto max-w-3xl px-5 py-6">
       <div className="mb-4">
         <h1 className="text-lg font-semibold text-strong">Settings</h1>
-        <p className="mt-0.5 text-[12px] text-slate-500">
-          API key, engine default, dan perilaku otomatis. Disimpan lokal di{' '}
-          <code className="text-slate-400">backend/data/settings.json</code>.
+        <p className="mt-0.5 text-[12px] text-slate-400">
+          Engine CLI default, durasi scene, dan perilaku otomatis. Disimpan lokal di{' '}
+          <code className="text-slate-300">backend/data/settings.json</code>.
         </p>
       </div>
 
       {!settings ? (
-        <div className="card p-6 text-sm text-slate-500">
+        <div className="card p-6 text-sm text-slate-400">
           {error ? `Gagal memuat settings: ${error}` : 'Memuat...'}
         </div>
       ) : (
         <div className="space-y-4">
-          <section className="card space-y-4 p-5">
+          {/* API Provider UI sementara disembunyikan sampai pengujian API key selesai.
+              Backend (gemini / openai) tetap aktif dan siap dipakai nanti. */}
+          {/* <section className="card space-y-4 p-5">
             <h2 className="text-sm font-semibold text-strong">API Provider</h2>
 
             <div>
@@ -113,7 +115,7 @@ export default function SettingsView() {
                 />
               </div>
             </div>
-          </section>
+          </section> */}
 
           <section className="card space-y-4 p-5">
             <h2 className="text-sm font-semibold text-strong">Engine Default</h2>
@@ -129,8 +131,10 @@ export default function SettingsView() {
                 >
                   <option value="agy">agy</option>
                   <option value="codex">codex</option>
+                  {/* Aktifkan kembali setelah pengujian API key selesai:
                   <option value="gemini">gemini</option>
                   <option value="openai">openai</option>
+                  */}
                 </select>
               </div>
               <div>

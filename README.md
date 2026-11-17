@@ -74,7 +74,11 @@ http://localhost:5173.
 | GET | `/api/projects/{id}/audio/{stem}` | `original` / `vocals` / `music` / `effects` |
 | GET | `/api/projects/{id}/report` | rea-video `report.html` |
 | GET | `/api/projects/{id}/logs` | prompt/response log (JSONL, newest first) |
-| POST | `/api/projects/{id}/scenes/{scene_id}/generate` | `{engine: agy\|codex}` |
+| POST | `/api/projects/{id}/scenes/{scene_id}/deep-analyze` | extract frames every 0.5s for detailed timeline + prompts |
+| POST | `/api/projects/{id}/scenes/{scene_id}/video-prompt` | generate model-specific video prompt (`omni_1_2`, `veo_3_1_lite`, `seedance_2_0`, `minimax`, `kling`) |
+| GET | `/api/projects/{id}/scenes/{scene_id}/clip` | lazy on-demand ffmpeg scene clip (`?download=1`) |
+| POST | `/api/projects/{id}/scenes/{scene_id}/generate` | `{engine: agy\|codex, target: first\|last\|both}` |
+| GET | `/api/projects/{id}/scenes/{scene_id}/last-image` | generated Last Keyframe PNG |
 | POST | `/api/projects/{id}/generate-all` | queue every scene that has a prompt |
 | GET | `/api/projects/{id}/export` | ZIP bundle |
 | GET/PUT | `/api/settings` | API keys, default engines |
@@ -111,8 +115,8 @@ cd backend
 Covers the per-shot rule (no merging, splitting, contiguity, edge durations), the dual prompts,
 last-frame/audio/report endpoints and the export bundle.
 
-## Attribution & license
+## Attribution, Skills & License
 
-Video decomposition uses [`JuneYaooo/rea-video`](https://github.com/JuneYaooo/rea-video),
-licensed under **Apache-2.0**. Shot2Key only depends on its published CLI and `breakdown.json`
-output; no rea-video source is copied or modified.
+- **Video decomposition & model prompting playbook:** [`JuneYaooo/rea-video`](https://github.com/JuneYaooo/rea-video) (**Apache-2.0**). Shot2Key depends on the installed package (`rea-video` CLI, `breakdown.json`, and `capabilities/prompting.yaml` for Omni / Veo / Seedance / MiniMax / Kling prompt specifications); no `rea-video` source code is copied or modified.
+- **UI design quality & anti-slop review:** [`miqdadbadjuber/anti-slop`](https://github.com/miqdadbadjuber/anti-slop) (`antislop` + `antislop-ui` + `antislop-human` agent skill rules).
+- **Video prompting workflow references:** Official Google Veo / Omni prompting guides cited in `rea-video` and community pattern references such as [`Square-Zero-Labs/video-prompting-skill`](https://github.com/Square-Zero-Labs/video-prompting-skill) and [`kdowswell/veo-tools`](https://github.com/kdowswell/veo-tools).

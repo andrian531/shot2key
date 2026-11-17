@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import shutil
 from pathlib import Path
 from typing import Any, Literal
@@ -11,8 +12,9 @@ from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 import config
-from core import exporter, jobs, prompt_logger, store
+from core import exporter, jobs, media, prompt_logger, store
 from providers.base import ProviderError
+from providers.video_models import get_video_model, list_video_models
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -43,6 +45,11 @@ class ScenePatch(BaseModel):
 class ApplyCharactersRequest(BaseModel):
     character_mappings: dict[str, Any]
     replace_characters: bool = True
+
+
+class VideoPromptRequest(BaseModel):
+    model: str = Field(default="omni_1_2")
+    engine: str = Field(default="agy")
 
 
 def _load(project_id: str) -> dict[str, Any]:
@@ -213,6 +220,31 @@ async def deep_analyze_scene(
     return {"status": "started", "scene_id": scene_id, "engine": body.engine}
 
 
+@router.get("/meta/video-models")
+def video_models() -> dict[str, Any]:
+    return {"video_models": list_video_models()}
+
+
+@router.post("/{project_id}/scenes/{scene_id}/video-prompt")
+async def generate_video_prompt(
+    project_id: str, scene_id: str, body: VideoPromptRequest
+) -> dict[str, Any]:
+    project = _load(project_id)
+    _scene_or_404(project, scene_id)
+    if get_video_model(body.model) is None:
+        raise HTTPException(status_code=400, detail=f"Model video tidak dikenal: {body.model}")
+    if body.engine not in config.ANALYZER_ENGINES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Engine tidak dikenal. Pilih: {', '.join(config.ANALYZER_ENGINES)}",
+        )
+    if jobs.is_running(f"{project_id}:vprompt:{scene_id}"):
+        raise HTTPException(status_code=409, detail="Video prompt sedang digenerate.")
+
+    jobs.start_video_prompt(project_id, scene_id, body.model, body.engine)
+    return {"status": "started", "scene_id": scene_id, "model": body.model, "engine": body.engine}
+
+
 @router.post("/{project_id}/scenes/{scene_id}/generate")
 async def generate_scene(project_id: str, scene_id: str, body: GenerateRequest) -> dict[str, Any]:
     project = _load(project_id)
@@ -299,6 +331,33 @@ def scene_last_image(project_id: str, scene_id: str) -> FileResponse:
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Gambar last keyframe belum digenerate")
     return FileResponse(path, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/{project_id}/scenes/{scene_id}/clip")
+async def scene_clip(project_id: str, scene_id: str, download: bool = False) -> FileResponse:
+    """Cut and serve the scene MP4 clip lazily on first play."""
+    project = _load(project_id)
+    scene = _scene_or_404(project, scene_id)
+    video_path = Path(project.get("video_path") or "")
+    if not video_path.is_file():
+        raise HTTPException(status_code=404, detail="File video sumber tidak ditemukan")
+
+    clip_path = config.get_outputs_dir() / project_id / "clips" / f"{scene_id}.mp4"
+    if not clip_path.is_file() or clip_path.stat().st_size == 0:
+        cut = await asyncio.to_thread(
+            media.cut_scene_clip,
+            video_path,
+            float(scene.get("start_time") or 0.0),
+            float(scene.get("end_time") or 0.0),
+            clip_path,
+        )
+        if cut is None:
+            raise HTTPException(status_code=500, detail="Gagal memotong klip video dengan ffmpeg")
+
+    headers = {"Cache-Control": "public, max-age=3600"}
+    if download:
+        headers["Content-Disposition"] = f'attachment; filename="{scene_id}.mp4"'
+    return FileResponse(clip_path, media_type="video/mp4", headers=headers)
 
 
 AUDIO_STEMS = ("original", "vocals", "music", "effects")

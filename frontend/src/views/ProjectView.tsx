@@ -12,6 +12,7 @@ function needsPolling(project: Project | null): boolean {
   const anySceneBusy = (project.scenes ?? []).some(
     (scene) =>
       scene.deep_analyzing ||
+      scene.video_prompt_generating ||
       scene.image_status === 'queued' ||
       scene.image_status === 'generating' ||
       scene.last_image_status === 'queued' ||
@@ -155,6 +156,9 @@ export default function ProjectView() {
       onAnalyze={() => runAction(() => api.analyze(project.id, analyzer))}
       onDeepAnalyze={(sceneId) =>
         runAction(() => api.deepAnalyzeScene(project.id, sceneId, analyzer))
+      }
+      onGenerateVideoPrompt={(sceneId, model) =>
+        runAction(() => api.generateVideoPrompt(project.id, sceneId, model, analyzer))
       }
       onGenerateAll={(target = 'first') =>
         runAction(() => api.generateAll(project.id, imageEngine, target))

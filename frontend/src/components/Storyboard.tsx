@@ -28,6 +28,7 @@ interface Props {
   onSceneEngineChange: (sceneId: string, engine: ImageEngine) => void
   onAnalyze: () => void
   onDeepAnalyze: (sceneId: string) => void
+  onGenerateVideoPrompt: (sceneId: string, model: string) => void
   onGenerateAll: (target?: 'first' | 'last' | 'both') => void
   onGenerateScene: (sceneId: string, target?: 'first' | 'last' | 'both') => void
   onSavePrompt: (sceneId: string, patch: ScenePromptPatch) => Promise<void>
@@ -223,6 +224,7 @@ export default function Storyboard({
   onSceneEngineChange,
   onAnalyze,
   onDeepAnalyze,
+  onGenerateVideoPrompt,
   onGenerateAll,
   onGenerateScene,
   onSavePrompt,
@@ -278,12 +280,15 @@ export default function Storyboard({
                 value={analyzer}
                 onChange={(event) => onAnalyzerChange(event.target.value as Engine)}
               >
-                {(status?.engines.analyzers ?? ['agy', 'codex', 'gemini', 'openai']).map((engine) => (
-                  <option key={engine} value={engine}>
-                    {engine}
-                    {status && !status.analyzers_ready?.[engine] ? ' (belum siap)' : ''}
-                  </option>
-                ))}
+                {/* Tahap awal hanya tampilkan CLI (agy / codex); gemini/openai menyusul setelah diuji */}
+                {(status?.engines.analyzers ?? ['agy', 'codex'])
+                  .filter((engine) => engine === 'agy' || engine === 'codex')
+                  .map((engine) => (
+                    <option key={engine} value={engine}>
+                      {engine}
+                      {status && !status.analyzers_ready?.[engine] ? ' (belum siap)' : ''}
+                    </option>
+                  ))}
               </select>
               <button
                 className="btn-ghost py-1.5 text-xs"
@@ -566,6 +571,7 @@ export default function Storyboard({
               projectId={project.id}
               scene={activeScene}
               characters={characters}
+              videoModels={status?.video_models ?? []}
               analyzing={analyzing}
               engine={sceneEngines[activeScene.id] ?? imageEngine}
               onEngineChange={(engine) => onSceneEngineChange(activeScene.id, engine)}
@@ -573,11 +579,14 @@ export default function Storyboard({
               onUpdateSceneCharacters={onUpdateSceneCharacters}
               onApplyCharactersAll={onApplyCharactersAll}
               onDeepAnalyze={onDeepAnalyze}
+              onGenerateVideoPrompt={onGenerateVideoPrompt}
               onGenerate={onGenerateScene}
               keyframeUrl={api.keyframeUrl(project.id, activeScene.id)}
               lastKeyframeUrl={api.lastKeyframeUrl(project.id, activeScene.id)}
               imageUrl={api.imageUrl(project.id, activeScene.id)}
               lastImageUrl={api.lastImageUrl(project.id, activeScene.id)}
+              clipUrl={api.sceneClipUrl(project.id, activeScene.id)}
+              clipDownloadUrl={api.sceneClipUrl(project.id, activeScene.id, true)}
             />
           </div>
         </div>

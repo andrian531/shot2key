@@ -1,7 +1,21 @@
 import { useEffect, useState } from 'react'
-import type { Character, ImageEngine, Scene, SceneCharacterMapping } from '../types'
+import type {
+  Character,
+  ImageEngine,
+  Scene,
+  SceneCharacterMapping,
+  VideoModelOption,
+} from '../types'
 import { formatTime } from '../lib/format'
 import { formatPromptForMode } from '../lib/prompts'
+
+const FALLBACK_VIDEO_MODELS: VideoModelOption[] = [
+  { id: 'omni_1_2', label: 'Omni 1.2 Flash (Google Flow)', provider: 'Google Flow' },
+  { id: 'veo_3_1_lite', label: 'Veo 3.1 - Lite (Google Flow)', provider: 'Google Flow' },
+  { id: 'seedance_2_0', label: 'Seedance 2.0', provider: 'ByteDance Seedance' },
+  { id: 'minimax', label: 'MiniMax (Hailuo)', provider: 'MiniMax' },
+  { id: 'kling', label: 'Kling AI', provider: 'Kuaishou Kling' },
+]
 
 export interface ScenePromptPatch {
   prompt?: string
@@ -13,6 +27,7 @@ interface Props {
   projectId: string
   scene: Scene
   characters: Character[]
+  videoModels?: VideoModelOption[]
   analyzing?: boolean
   engine: ImageEngine
   onEngineChange: (engine: ImageEngine) => void
@@ -24,11 +39,14 @@ interface Props {
   ) => Promise<void>
   onApplyCharactersAll: (mappings: Record<string, SceneCharacterMapping>) => Promise<void>
   onDeepAnalyze: (sceneId: string) => void
+  onGenerateVideoPrompt: (sceneId: string, model: string) => void
   onGenerate: (sceneId: string, target?: 'first' | 'last' | 'both') => void
   keyframeUrl: string
   lastKeyframeUrl: string
   imageUrl: string
   lastImageUrl: string
+  clipUrl: string
+  clipDownloadUrl: string
 }
 
 const STATUS_STYLE: Record<Scene['image_status'], string> = {
@@ -91,21 +109,28 @@ export default function SceneCard({
   projectId,
   scene,
   characters,
+  videoModels,
   analyzing = false,
   engine,
   onEngineChange,
   onSavePrompt,
   onUpdateSceneCharacters,
   onDeepAnalyze,
+  onGenerateVideoPrompt,
   onGenerate,
   keyframeUrl,
   lastKeyframeUrl,
   imageUrl,
   lastImageUrl,
+  clipUrl,
+  clipDownloadUrl,
 }: Props) {
+  const models = videoModels && videoModels.length > 0 ? videoModels : FALLBACK_VIDEO_MODELS
   const [prompt, setPrompt] = useState(scene.prompt)
   const [lastPrompt, setLastPrompt] = useState(scene.last_prompt ?? '')
   const [videoPrompt, setVideoPrompt] = useState(scene.video_prompt ?? '')
+  const [videoModel, setVideoModel] = useState(scene.video_model ?? models[0].id)
+  const [clipOpen, setClipOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
 
@@ -113,8 +138,9 @@ export default function SceneCard({
     setPrompt(scene.prompt)
     setLastPrompt(scene.last_prompt ?? '')
     setVideoPrompt(scene.video_prompt ?? '')
+    if (scene.video_model) setVideoModel(scene.video_model)
     setDirty(false)
-  }, [scene.prompt, scene.last_prompt, scene.video_prompt])
+  }, [scene.prompt, scene.last_prompt, scene.video_prompt, scene.video_model])
 
   async function commit() {
     if (!dirty) return
@@ -144,6 +170,7 @@ export default function SceneCard({
   const hasLastGen = scene.last_image_status === 'done'
   const hasLastRef = Boolean(scene.last_keyframe)
   const deepBusy = Boolean(scene.deep_analyzing)
+  const videoPromptBusy = Boolean(scene.video_prompt_generating)
   const timeline = scene.deep_timeline ?? []
 
   return (
@@ -168,6 +195,14 @@ export default function SceneCard({
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
+            className={`btn-ghost py-1 text-xs ${clipOpen ? 'border-amber-500/60 text-amber-300' : ''}`}
+            onClick={() => setClipOpen((open) => !open)}
+            title="Potong dan putar klip video asli scene ini secara on-demand"
+          >
+            {clipOpen ? 'Tutup Clip' : 'Play Clip'}
+          </button>
+          <button
+            type="button"
             className="btn-ghost py-1 text-xs"
             disabled={deepBusy || analyzing}
             onClick={() => onDeepAnalyze(scene.id)}
@@ -185,6 +220,30 @@ export default function SceneCard({
           )}
         </div>
       </div>
+
+      {/* Lazy On-Demand Scene Video Player (cut only when user clicks Play Clip) */}
+      {clipOpen && (
+        <div className="border-b border-ink-800 bg-ink-950 p-3">
+          <div className="mb-2 flex items-center justify-between text-xs text-slate-300">
+            <span>
+              Klip asli Scene {String(scene.index).padStart(2, '0')} ({formatTime(scene.start_time)} →{' '}
+              {formatTime(scene.end_time)})
+            </span>
+            <a href={clipDownloadUrl} className="font-medium text-amber-400 hover:underline">
+              Download MP4
+            </a>
+          </div>
+          <video
+            key={clipUrl}
+            controls
+            autoPlay
+            loop
+            playsInline
+            src={clipUrl}
+            className="max-h-72 w-full rounded-lg bg-black"
+          />
+        </div>
+      )}
 
       {/* Visual Strip: Referensi (First & Last) + Keyframe Hasil Generate (First & Last) */}
       <div className="grid grid-cols-2 gap-px bg-ink-800 xl:grid-cols-4">
@@ -381,18 +440,39 @@ export default function SceneCard({
             />
           </div>
 
-          {/* 3. Video Prompt (Omni 1.2 Flash / Veo 3.1 Lite) */}
+          {/* 3. Video Prompt (Model-specific generator) */}
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between gap-2">
-              <label className="label mb-0 text-amber-300">
-                3. Video Prompt (Omni 1.2 / Veo 3.1 Lite)
-              </label>
+              <label className="label mb-0 text-amber-300">3. Video Prompt</label>
               <CopyButton text={displayVideoPrompt} label="video prompt" />
             </div>
+            <div className="flex items-center gap-1.5">
+              <select
+                className="input min-w-0 flex-1 py-1 text-xs"
+                value={videoModel}
+                onChange={(event) => setVideoModel(event.target.value)}
+                title="Target generator video AI"
+              >
+                {models.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="btn-ghost shrink-0 py-1 text-xs"
+                disabled={videoPromptBusy || analyzing || deepBusy}
+                onClick={() => onGenerateVideoPrompt(scene.id, videoModel)}
+                title="Susun ulang video prompt dari data scene sesuai aturan model terpilih"
+              >
+                {videoPromptBusy ? 'Generating...' : 'Generate Prompt'}
+              </button>
+            </div>
             <textarea
-              className="input min-h-[120px] flex-1 resize-y font-mono text-xs leading-relaxed"
+              className="input min-h-[104px] flex-1 resize-y font-mono text-xs leading-relaxed"
               value={replaceEnabled ? videoPrompt : displayVideoPrompt}
-              placeholder="Gerakan subjek, kamera, dan audio cue untuk Google Flow..."
+              placeholder="Pilih target model lalu klik Generate Prompt..."
               onChange={(event) => {
                 setVideoPrompt(event.target.value)
                 setDirty(true)

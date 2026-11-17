@@ -11,6 +11,7 @@ import config
 from core import decomposer, media
 from core import settings as settings_store
 from providers import cli_provider, registry
+from providers.video_models import list_video_models
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
@@ -43,6 +44,7 @@ def status() -> dict[str, object]:
         "api_keys": api_ready,
         "analyzers_ready": analyzers_ready,
         "engines": registry.status(),
+        "video_models": list_video_models(),
         "defaults": {
             "analyzer": settings.get("default_analyzer"),
             "image_engine": settings.get("default_image_engine"),

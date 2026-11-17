@@ -64,6 +64,12 @@ export const api = {
       body: JSON.stringify({ engine }),
     }),
 
+  generateVideoPrompt: (id: string, sceneId: string, model: string, engine: string) =>
+    request<{ status: string }>(`/projects/${id}/scenes/${sceneId}/video-prompt`, {
+      method: 'POST',
+      body: JSON.stringify({ model, engine }),
+    }),
+
   patchScene: (
     id: string,
     sceneId: string,
@@ -128,6 +134,8 @@ export const api = {
   imageUrl: (id: string, sceneId: string) => `${BASE}/projects/${id}/scenes/${sceneId}/image`,
   lastImageUrl: (id: string, sceneId: string) =>
     `${BASE}/projects/${id}/scenes/${sceneId}/last-image`,
+  sceneClipUrl: (id: string, sceneId: string, download = false) =>
+    `${BASE}/projects/${id}/scenes/${sceneId}/clip${download ? '?download=1' : ''}`,
   audioStemUrl: (id: string, stem: string, download = false) =>
     `${BASE}/projects/${id}/audio/${stem}${download ? '?download=1' : ''}`,
   reportUrl: (id: string) => `${BASE}/projects/${id}/report`,

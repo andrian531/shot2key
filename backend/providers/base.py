@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
+from providers.video_models import build_model_rules_text, get_video_model
+
 
 class ProviderError(RuntimeError):
     """A provider could not produce a result (missing key, CLI failure, ...)."""
@@ -127,6 +129,9 @@ def scene_input_images(
 
 def analyze_prompt(scene: dict[str, Any], context: dict[str, Any]) -> str:
     """Text prompt handed to a CLI agent or an API model for one scene."""
+    if context.get("video_prompt_only"):
+        return _video_prompt_for_model(scene, context)
+
     lines = [
         ANALYZE_SYSTEM,
         "",
@@ -159,6 +164,62 @@ def analyze_prompt(scene: dict[str, Any], context: dict[str, Any]) -> str:
     lines += ["", ANALYZE_INSTRUCTIONS.replace("{duration}", f"{float(duration):.2f}")]
     if context.get("deep_frames"):
         lines += ["", DEEP_ANALYZE_EXTRA]
+    return "\n".join(lines)
+
+
+def _video_prompt_for_model(scene: dict[str, Any], context: dict[str, Any]) -> str:
+    model_id = str(context.get("video_model") or "omni_1_2")
+    spec = get_video_model(model_id)
+    duration = float(scene.get("duration") or 0)
+    lines = [
+        "You are an expert AI video prompt engineer.",
+        f"Convert the stored scene data below into a single production-ready video prompt for {spec.label if spec else model_id}.",
+        "",
+        f"Scene {scene.get('index')} | Duration: {duration:.2f}s "
+        f"({scene.get('start_time')}s - {scene.get('end_time')}s).",
+    ]
+    if scene.get("description"):
+        lines.append(f"Scene description: {scene['description']}")
+    if scene.get("camera"):
+        lines.append(f"Camera: {scene['camera']}")
+    if scene.get("lighting"):
+        lines.append(f"Lighting: {scene['lighting']}")
+    if scene.get("prompt"):
+        lines.append(f"First Frame summary: {scene['prompt']}")
+    if scene.get("last_prompt"):
+        lines.append(f"Last Frame summary: {scene['last_prompt']}")
+    chars = scene.get("detected_characters") or []
+    if chars:
+        lines.append("Detected characters:")
+        for c in chars:
+            if isinstance(c, dict) and c.get("slot"):
+                lines.append(f"- [{c['slot']}]: {c.get('description', '')}")
+    timeline = scene.get("deep_timeline") or []
+    if timeline:
+        lines.append("Deep Timeline (0.5s beats):")
+        for beat in timeline:
+            if isinstance(beat, dict):
+                lines.append(
+                    f"- {beat.get('time', '')}: action={beat.get('action', '')}; "
+                    f"expression={beat.get('expression', '')}; camera={beat.get('camera', '')}"
+                )
+    images = scene_input_images(scene)
+    if images:
+        lines.append("")
+        lines.append("Reference frames (for visual verification if accessible):")
+        for label, path in images[:2]:
+            lines.append(f"- {label}: {path}")
+    if spec:
+        lines += [
+            "",
+            "MODEL-SPECIFIC PROMPTING RULES:",
+            build_model_rules_text(model_id, duration),
+        ]
+    lines += [
+        "",
+        'Return ONLY a JSON object, no prose, no markdown fence: {"video_prompt": "..."}',
+        "Write the value in English.",
+    ]
     return "\n".join(lines)
 
 
@@ -386,11 +447,12 @@ def analysis_from_payload(payload: dict[str, Any], raw: str = "") -> SceneAnalys
 
     description = pick("description", "visual_description", "scene", "summary")
     prompt = pick("prompt", "image_prompt", "generation_prompt")
+    video_prompt = pick("video_prompt", "motion_prompt", "video", "motion")
     if not prompt and description:
         prompt = description
     if not description and prompt:
         description = prompt
-    if not prompt:
+    if not prompt and not video_prompt:
         raise ProviderError("Provider tidak mengembalikan prompt.")
     raw_chars = payload.get("characters")
     characters: list[dict[str, str]] = []
@@ -422,7 +484,7 @@ def analysis_from_payload(payload: dict[str, Any], raw: str = "") -> SceneAnalys
         description=description,
         prompt=prompt,
         last_prompt=pick("last_prompt", "last_image_prompt", "end_prompt"),
-        video_prompt=pick("video_prompt", "motion_prompt", "video", "motion"),
+        video_prompt=video_prompt,
         camera=pick("camera", "camera_notes", "shot"),
         lighting=pick("lighting", "light"),
         characters=characters,
