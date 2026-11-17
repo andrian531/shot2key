@@ -39,6 +39,7 @@ class ScenePatch(BaseModel):
     camera: str | None = None
     lighting: str | None = None
     replace_characters: bool | None = None
+    replace_slots: list[str] | None = None
     character_mappings: dict[str, Any] | None = None
 
 

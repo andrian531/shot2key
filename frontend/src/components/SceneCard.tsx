@@ -7,7 +7,7 @@ import type {
   VideoModelOption,
 } from '../types'
 import { formatTime } from '../lib/format'
-import { formatPromptForMode } from '../lib/prompts'
+import { activeReplaceSlots, formatPromptForMode } from '../lib/prompts'
 
 const FALLBACK_VIDEO_MODELS: VideoModelOption[] = [
   { id: 'omni_1_2', label: 'Omni 1.2 Flash (Google Flow)', provider: 'Google Flow' },
@@ -36,6 +36,7 @@ interface Props {
     sceneId: string,
     replaceCharacters: boolean,
     mappings: Record<string, SceneCharacterMapping>,
+    replaceSlots?: string[],
   ) => Promise<void>
   onApplyCharactersAll: (mappings: Record<string, SceneCharacterMapping>) => Promise<void>
   onDeepAnalyze: (sceneId: string) => void
@@ -159,9 +160,22 @@ export default function SceneCard({
 
   const replaceEnabled = Boolean(scene.replace_characters)
   const detected = scene.detected_characters ?? []
+  const selectedSlots = activeReplaceSlots(scene)
   const displayFirstPrompt = formatPromptForMode(prompt, scene, characters)
   const displayLastPrompt = formatPromptForMode(lastPrompt, scene, characters)
   const displayVideoPrompt = formatPromptForMode(videoPrompt, scene, characters)
+
+  function toggleCharSlot(slot: string, checked: boolean) {
+    const current = new Set(selectedSlots)
+    if (checked) current.add(slot)
+    else current.delete(slot)
+    void onUpdateSceneCharacters(
+      scene.id,
+      replaceEnabled,
+      scene.character_mappings ?? {},
+      Array.from(current),
+    )
+  }
 
   const busyFirst = scene.image_status === 'queued' || scene.image_status === 'generating'
   const busyLast = scene.last_image_status === 'queued' || scene.last_image_status === 'generating'
@@ -397,24 +411,55 @@ export default function SceneCard({
               type="checkbox"
               checked={replaceEnabled}
               onChange={(e) =>
-                void onUpdateSceneCharacters(scene.id, e.target.checked, scene.character_mappings ?? {})
+                void onUpdateSceneCharacters(
+                  scene.id,
+                  e.target.checked,
+                  scene.character_mappings ?? {},
+                  e.target.checked ? selectedSlots : undefined,
+                )
               }
             />
-            Replace Karakter (tampilkan tag [Char_1], [Char_2] untuk manual di Google Flow)
+            Replace Karakter (pilih karakter mana yang masuk prompt sebagai tag [Char_N])
             {detected.length > 0 && (
               <span className="badge bg-ink-800 text-[11px] text-slate-300">
-                {detected.length} terdeteksi
+                {replaceEnabled
+                  ? `${selectedSlots.length}/${detected.length} dipilih`
+                  : `${detected.length} terdeteksi`}
               </span>
             )}
           </label>
           {replaceEnabled && detected.length > 0 && (
-            <ul className="mt-2 space-y-1 border-t border-ink-800/80 pt-2 text-xs text-slate-300">
-              {detected.map((char) => (
-                <li key={char.slot} className="flex gap-2">
-                  <span className="font-mono font-semibold text-amber-300">[{char.slot}]</span>
-                  <span>{char.description}</span>
-                </li>
-              ))}
+            <ul className="mt-2.5 space-y-1.5 border-t border-ink-800/80 pt-2.5 text-xs text-slate-300">
+              {detected.map((char) => {
+                const slotChecked = selectedSlots.includes(char.slot)
+                return (
+                  <li key={char.slot}>
+                    <label className="flex cursor-pointer items-start gap-2">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={slotChecked}
+                        onChange={(e) => toggleCharSlot(char.slot, e.target.checked)}
+                      />
+                      <span
+                        className={`font-mono font-semibold ${
+                          slotChecked ? 'text-amber-300' : 'text-slate-400 line-through'
+                        }`}
+                      >
+                        [{char.slot}]
+                      </span>
+                      <span className={slotChecked ? 'text-slate-200' : 'text-slate-400'}>
+                        {char.description}
+                        {!slotChecked && (
+                          <span className="ml-1.5 text-[11px] text-slate-400">
+                            (karakter sampingan — pakai deskripsi asli)
+                          </span>
+                        )}
+                      </span>
+                    </label>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </div>
@@ -461,7 +506,7 @@ export default function SceneCard({
               </div>
               <textarea
                 className="input min-h-[120px] flex-1 resize-y font-mono text-xs leading-relaxed"
-                value={replaceEnabled ? prompt : displayFirstPrompt}
+                value={dirty ? prompt : displayFirstPrompt}
                 placeholder={
                   analyzing || deepBusy
                     ? 'Sedang menganalisis...'
@@ -526,7 +571,7 @@ export default function SceneCard({
               </div>
               <textarea
                 className="input min-h-[120px] flex-1 resize-y font-mono text-xs leading-relaxed"
-                value={replaceEnabled ? lastPrompt : displayLastPrompt}
+                value={dirty ? lastPrompt : displayLastPrompt}
                 placeholder={
                   analyzing || deepBusy
                     ? 'Sedang menganalisis...'
@@ -636,7 +681,7 @@ export default function SceneCard({
 
           <textarea
             className="input min-h-[104px] w-full resize-y font-mono text-xs leading-relaxed"
-            value={replaceEnabled ? videoPrompt : displayVideoPrompt}
+            value={dirty ? videoPrompt : displayVideoPrompt}
             placeholder="Kosong secara default — pilih target model lalu klik Generate Prompt."
             onChange={(event) => {
               setVideoPrompt(event.target.value)

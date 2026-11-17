@@ -131,3 +131,28 @@ def test_lazy_scene_clip_cuts_once_and_caches(client, monkeypatch, tmp_path: Pat
     assert r2.status_code == 200
     assert "attachment" in r2.headers.get("content-disposition", "")
     assert len(calls) == 1
+
+
+def test_partial_replace_slots_naturalizes_unchecked_char():
+    from providers.base import resolve_scene_prompt, resolve_video_prompt
+
+    scene = {
+        "id": "scene_001",
+        "prompt": "[Char_1] skates past [Char_3] holding a camera.",
+        "video_prompt": "[Char_1] glides downhill past [Char_3].",
+        "detected_characters": [
+            {"slot": "Char_1", "description": "pink-haired skater"},
+            {"slot": "Char_3", "description": "male camera operator in black"},
+        ],
+        "replace_characters": True,
+        "replace_slots": ["Char_1"],
+    }
+    first, _ = resolve_scene_prompt(scene, style_prompt="")
+    video = resolve_video_prompt(scene)
+
+    assert "[Char_1]" in first
+    assert "[Char_3]" not in first
+    assert "male camera operator in black" in first
+    assert "[Char_1]" in video
+    assert "[Char_3]" not in video
+    assert "male camera operator in black" in video

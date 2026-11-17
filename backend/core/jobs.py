@@ -156,6 +156,7 @@ def _build_scenes(
                 "deep_timeline": [],
                 "deep_analyzing": False,
                 "replace_characters": False,
+                "replace_slots": None,
                 "character_mappings": {},
                 "engine": None,
                 "image_path": None,

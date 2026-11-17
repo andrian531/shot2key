@@ -81,6 +81,7 @@ export const api = {
       camera?: string
       lighting?: string
       replace_characters?: boolean
+      replace_slots?: string[]
       character_mappings?: Record<string, SceneCharacterMapping>
     },
   ) =>

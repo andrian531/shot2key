@@ -36,6 +36,7 @@ interface Props {
     sceneId: string,
     replaceCharacters: boolean,
     mappings: Record<string, SceneCharacterMapping>,
+    replaceSlots?: string[],
   ) => Promise<void>
   onApplyCharactersAll: (mappings: Record<string, SceneCharacterMapping>) => Promise<void>
   onExport: () => void

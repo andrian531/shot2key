@@ -171,10 +171,11 @@ export default function ProjectView() {
       onSavePrompt={(sceneId, patch) =>
         api.patchScene(project.id, sceneId, patch).then(setProject)
       }
-      onUpdateSceneCharacters={(sceneId, replaceCharacters, mappings) =>
+      onUpdateSceneCharacters={(sceneId, replaceCharacters, mappings, replaceSlots) =>
         api
           .patchScene(project.id, sceneId, {
             replace_characters: replaceCharacters,
+            ...(replaceSlots !== undefined ? { replace_slots: replaceSlots } : {}),
             character_mappings: mappings,
           })
           .then(setProject)

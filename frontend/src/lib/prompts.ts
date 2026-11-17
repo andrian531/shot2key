@@ -1,8 +1,14 @@
 import type { Character, Scene } from '../types'
 
+/** Slots actively kept as `[Char_N]` when Replace Karakter is enabled. */
+export function activeReplaceSlots(scene: Scene): string[] {
+  if (Array.isArray(scene.replace_slots)) return scene.replace_slots
+  return (scene.detected_characters ?? []).map((item) => item.slot).filter(Boolean)
+}
+
 /**
- * Replace `[Char_N]` with natural descriptions when `replace_characters` is OFF,
- * or keep `[Char_N]` tags (or mapped characters) when `replace_characters` is ON.
+ * Replace `[Char_N]` with natural descriptions for any slot that is unchecked
+ * (or when `replace_characters` is OFF), while keeping checked `[Char_N]` tags.
  */
 export function formatPromptForMode(
   text: string,
@@ -11,32 +17,34 @@ export function formatPromptForMode(
 ): string {
   if (!text.trim()) return text
 
-  if (!scene.replace_characters) {
-    let natural = text
-    for (const item of scene.detected_characters ?? []) {
-      const slot = item.slot?.trim()
-      const desc = item.description?.trim()
-      if (!slot || !desc) continue
-      natural = natural.split(`[${slot}]`).join(desc)
-    }
-    return natural
+  const keep = scene.replace_characters ? new Set(activeReplaceSlots(scene)) : new Set<string>()
+  let out = text
+  for (const item of scene.detected_characters ?? []) {
+    const slot = item.slot?.trim()
+    const desc = item.description?.trim()
+    if (!slot || !desc || keep.has(slot)) continue
+    out = out.split(`[${slot}]`).join(desc)
   }
 
-  return resolveVideoPrompt(text, scene, characters)
+  if (!scene.replace_characters) return out
+  return resolveVideoPrompt(out, scene, characters, keep)
 }
 
 export function resolveVideoPrompt(
   text: string,
   scene: Scene,
   characters: Character[],
+  keepSlots?: Set<string>,
 ): string {
   if (!text.trim() || !scene.replace_characters) return text
 
+  const active = keepSlots ?? new Set(activeReplaceSlots(scene))
   const mappings = scene.character_mappings ?? {}
   let out = text
   const notes: string[] = []
 
   for (const [slot, mapping] of Object.entries(mappings)) {
+    if (!active.has(slot)) continue
     const character = characters.find((item) => item.id === mapping.character_id)
     if (!character) continue
 

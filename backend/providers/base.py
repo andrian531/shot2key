@@ -235,17 +235,43 @@ Use your image generation tool, then copy or move the result to that path.
 Reply with only the absolute file path when the file exists."""
 
 
-def _naturalize_placeholders(text: str, scene: dict[str, Any]) -> str:
-    """Replace ``[Char_N]`` tags with natural descriptions from ``detected_characters``."""
+def _naturalize_placeholders(
+    text: str,
+    scene: dict[str, Any],
+    keep_slots: set[str] | None = None,
+) -> str:
+    """Replace ``[Char_N]`` tags with natural descriptions from ``detected_characters``.
+
+    Slots listed in ``keep_slots`` remain as ``[Char_N]`` tags.
+    """
+    keep = keep_slots or set()
     for item in scene.get("detected_characters") or []:
         if not isinstance(item, dict):
             continue
         slot = str(item.get("slot") or "").strip()
         desc = str(item.get("description") or "").strip()
-        if not slot or not desc:
+        if not slot or not desc or slot in keep:
             continue
         text = text.replace(f"[{slot}]", desc)
     return text
+
+
+def _active_replace_slots(scene: dict[str, Any]) -> set[str]:
+    """Slots explicitly kept for replacement (defaults to all detected/mapped slots)."""
+    explicit = scene.get("replace_slots")
+    if isinstance(explicit, list):
+        return {str(s).strip() for s in explicit if str(s).strip()}
+    slots = {
+        str(item.get("slot") or "").strip()
+        for item in (scene.get("detected_characters") or [])
+        if isinstance(item, dict) and str(item.get("slot") or "").strip()
+    }
+    slots.update(
+        str(k).strip()
+        for k in (scene.get("character_mappings") or {}).keys()
+        if str(k).strip()
+    )
+    return slots
 
 
 def _apply_character_replacements(
@@ -253,16 +279,20 @@ def _apply_character_replacements(
     scene: dict[str, Any],
     character_lookup: dict[str, dict[str, Any]] | None,
 ) -> tuple[str, list[tuple[str, str]]]:
-    """Resolve ``[Char_1]`` tags based on ``replace_characters``.
+    """Resolve ``[Char_1]`` tags based on ``replace_characters`` and ``replace_slots``.
 
-    - When ``replace_characters`` is False: swap ``[Char_N]`` for natural
-      descriptions from ``detected_characters`` so raw tags never leak.
-    - When ``replace_characters`` is True: keep ``[Char_N]`` tags (or swap
-      mapped Character Cards if any exist in ``character_lookup``).
+    - When ``replace_characters`` is False: swap all ``[Char_N]`` for natural
+      descriptions from ``detected_characters``.
+    - When ``replace_characters`` is True: naturalize any unchecked slot (not in
+      ``replace_slots``), and keep active slots as ``[Char_N]`` (or swap mapped
+      Character Cards if configured).
     """
     ref_images: list[tuple[str, str]] = []
     if not scene.get("replace_characters"):
         return _naturalize_placeholders(text, scene), ref_images
+
+    active_slots = _active_replace_slots(scene)
+    text = _naturalize_placeholders(text, scene, keep_slots=active_slots)
 
     if not character_lookup:
         return text, ref_images
@@ -270,6 +300,8 @@ def _apply_character_replacements(
     mappings = scene.get("character_mappings") or {}
     extra_notes: list[str] = []
     for slot, mapping in mappings.items():
+        if slot not in active_slots:
+            continue
         if not isinstance(mapping, dict):
             continue
         char_id = mapping.get("character_id")

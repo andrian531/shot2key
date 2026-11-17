@@ -89,6 +89,7 @@ export interface Scene {
   deep_analyzing?: boolean
   deep_progress?: { percent: number; message: string } | null
   replace_characters?: boolean
+  replace_slots?: string[] | null
   character_mappings?: Record<string, SceneCharacterMapping>
   engine: string | null
   image_path: string | null
