@@ -147,6 +147,7 @@ export interface UIStrings {
   defaultCliConfigOption: string
   refreshModelsBtn: string
   loadingModelsBtn: string
+  loadModelsFailed: (err: string) => string
   fallbackAnalyzerLabel: string
   fallbackDisabledOption: string
   fallbackModelLabel: string
@@ -311,6 +312,7 @@ const id: UIStrings = {
   defaultCliConfigOption: 'default (bawaan CLI)',
   refreshModelsBtn: 'Muat ulang daftar model',
   loadingModelsBtn: 'Memuat model...',
+  loadModelsFailed: (err) => `Gagal memuat daftar model CLI (pastikan server backend sudah direstart): ${err}`,
   fallbackAnalyzerLabel: 'Penganalisis cadangan (Fallback)',
   fallbackDisabledOption: 'Tidak ada (nonaktif)',
   fallbackModelLabel: 'Model cadangan',
@@ -476,6 +478,7 @@ const en: UIStrings = {
   defaultCliConfigOption: 'default (CLI config)',
   refreshModelsBtn: 'Refresh models',
   loadingModelsBtn: 'Loading models...',
+  loadModelsFailed: (err) => `Failed to load CLI model list (make sure backend server is restarted): ${err}`,
   fallbackAnalyzerLabel: 'Fallback analyzer (on failure)',
   fallbackDisabledOption: 'None (disabled)',
   fallbackModelLabel: 'Fallback model',

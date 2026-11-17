@@ -19,21 +19,25 @@ export default function SettingsView() {
     codex: ['default'],
   })
   const [loadingModels, setLoadingModels] = useState(false)
+  const [modelsError, setModelsError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
   const refreshCliModels = useCallback(async () => {
     setLoadingModels(true)
+    setModelsError(null)
     try {
       const [agyRes, codexRes] = await Promise.all([
-        api.getCliModels('agy').catch(() => ({ models: ['default'] })),
-        api.getCliModels('codex').catch(() => ({ models: ['default'] })),
+        api.getCliModels('agy'),
+        api.getCliModels('codex'),
       ])
       setCliModels({
         agy: agyRes.models?.length ? agyRes.models : ['default'],
         codex: codexRes.models?.length ? codexRes.models : ['default'],
       })
+    } catch (err) {
+      setModelsError((err as Error).message)
     } finally {
       setLoadingModels(false)
     }
@@ -165,6 +169,11 @@ export default function SettingsView() {
                 {loadingModels ? t.loadingModelsBtn : t.refreshModelsBtn}
               </button>
             </div>
+            {modelsError && (
+              <p className="rounded border border-amber-900/60 bg-amber-950/40 px-3 py-2 text-xs text-amber-200">
+                {t.loadModelsFailed(modelsError)}
+              </p>
+            )}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className="label">{t.defaultAnalyzerLabel}</label>
