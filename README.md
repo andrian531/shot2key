@@ -1,8 +1,8 @@
 # Shot2Key
 
-**Turn any reference video into scene-by-scene keyframe prompts and model-tuned motion prompts — running locally on the AI Pro and Codex subscriptions you already pay for.**
+**Turn any reference video into scene-by-scene keyframe prompts and model-tuned motion prompts — running locally on the Google AI and Codex subscriptions you already pay for.**
 
-Most video-breakdown workflows force you to wire up pay-as-you-go vision and image APIs before you can recreate a single shot. Shot2Key keeps everything on your machine: [`JuneYaooo/rea-video`](https://github.com/JuneYaooo/rea-video) handles shot detection, audio stem separation, and reference frames locally, while your logged-in **`agy` CLI** (Google AI Pro) and **`codex` CLI** (ChatGPT / Codex) handle scene analysis, 0.5-second expression breakdowns, and optional First/Last Keyframe generation.
+Most video-breakdown workflows force you to wire up pay-as-you-go vision and image APIs before you can recreate a single shot. Shot2Key keeps everything on your machine: [`JuneYaooo/rea-video`](https://github.com/JuneYaooo/rea-video) handles shot detection, audio stem separation, and reference frames locally, while your logged-in **`agy` CLI** (Google AI subscription) and **`codex` CLI** (ChatGPT / Codex) handle scene analysis, 0.5-second expression breakdowns, and optional First/Last Keyframe generation.
 
 ### Why Creators Use Shot2Key
 
@@ -22,7 +22,7 @@ Video decomposition and vendor prompting specifications are powered by [`JuneYao
 |---|---|---|
 | Python 3.10+ | backend + `rea-video` | https://www.python.org/downloads/ |
 | Node.js 18+ | frontend | https://nodejs.org/ |
-| `agy` CLI | video/frame analysis, prompt crafting & keyframe generation (uses your Google AI Pro login) | PowerShell: `irm https://antigravity.google/cli/install.ps1 \| iex` — docs: https://antigravity.google/docs/cli/reference |
+| `agy` CLI | video/frame analysis, prompt crafting & keyframe generation (uses your Google AI subscription login) | PowerShell: `irm https://antigravity.google/cli/install.ps1 \| iex` — docs: https://antigravity.google/docs/cli/reference |
 | `codex` CLI | video/frame analysis, prompt crafting & keyframe generation (uses your ChatGPT / Codex login) | `npm install -g @openai/codex@latest` — repo: https://github.com/openai/codex |
 
 `start.bat` **checks both CLIs first** and stops with the exact install command + official URL if one is missing. To run with only one of them:
